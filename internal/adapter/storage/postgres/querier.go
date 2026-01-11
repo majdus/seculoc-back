@@ -11,10 +11,16 @@ import (
 )
 
 type Querier interface {
+	CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error)
 	CreateCreditTransaction(ctx context.Context, arg CreateCreditTransactionParams) (CreditTransaction, error)
+	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetUserById(ctx context.Context, id int32) (User, error)
 	GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error)
 	GetUserSubscription(ctx context.Context, userID pgtype.Int4) (Subscription, error)
+	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
 }
 
 var _ Querier = (*Queries)(nil)

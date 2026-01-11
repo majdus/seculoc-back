@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -13,42 +12,6 @@ import (
 
 	"seculoc-back/internal/adapter/storage/postgres"
 )
-
-// MockQuerier is a mock of the sqlc Querier interface
-type MockQuerier struct {
-	mock.Mock
-}
-
-func (m *MockQuerier) CreateSubscription(ctx context.Context, arg postgres.CreateSubscriptionParams) (postgres.Subscription, error) {
-	args := m.Called(ctx, arg)
-	return args.Get(0).(postgres.Subscription), args.Error(1)
-}
-
-func (m *MockQuerier) CreateCreditTransaction(ctx context.Context, arg postgres.CreateCreditTransactionParams) (postgres.CreditTransaction, error) {
-	args := m.Called(ctx, arg)
-	return args.Get(0).(postgres.CreditTransaction), args.Error(1)
-}
-
-func (m *MockQuerier) GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error) {
-	args := m.Called(ctx, userID)
-	return args.Get(0).(int32), args.Error(1)
-}
-
-func (m *MockQuerier) GetUserSubscription(ctx context.Context, userID pgtype.Int4) (postgres.Subscription, error) {
-	args := m.Called(ctx, userID)
-	return args.Get(0).(postgres.Subscription), args.Error(1)
-}
-
-// MockTxManager handles transaction beginning
-type MockTxManager struct {
-	mock.Mock
-}
-
-func (m *MockTxManager) WithTx(ctx context.Context, fn func(postgres.Querier) error) error {
-	// args contains the return values specified by .Return()
-	args := m.Called(ctx, fn)
-	return args.Error(0)
-}
 
 func TestSubscribeUser_TransactionFailure_LogsError(t *testing.T) {
 	// 1. Setup Logger Observer

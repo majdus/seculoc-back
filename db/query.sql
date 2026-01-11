@@ -1,3 +1,43 @@
+-- name: CreateUser :one
+INSERT INTO users (
+  email,
+  password_hash,
+  first_name,
+  last_name,
+  phone_number
+) VALUES (
+  $1, $2, $3, $4, $5
+)
+RETURNING *;
+
+-- name: GetUserByEmail :one
+SELECT * FROM users
+WHERE email = $1 LIMIT 1;
+
+-- name: GetUserById :one
+SELECT * FROM users
+WHERE id = $1 LIMIT 1;
+
+-- name: CreateProperty :one
+INSERT INTO properties (
+  owner_id,
+  address,
+  rental_type,
+  details
+) VALUES (
+  $1, $2, $3, $4
+)
+RETURNING *;
+
+-- name: ListPropertiesByOwner :many
+SELECT * FROM properties
+WHERE owner_id = $1
+ORDER BY created_at DESC;
+
+-- name: CountPropertiesByOwner :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND is_active = true;
+
 -- name: CreateSubscription :one
 INSERT INTO subscriptions (
     user_id, plan_type, frequency, start_date, end_date, max_properties_limit

@@ -11,6 +11,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPropertiesByOwner = `-- name: CountPropertiesByOwner :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND is_active = true
+`
+
+func (q *Queries) CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error) {
+	row := q.db.QueryRow(ctx, countPropertiesByOwner, ownerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCreditTransaction = `-- name: CreateCreditTransaction :one
 INSERT INTO credit_transactions (
     user_id, amount, transaction_type, description
@@ -41,6 +53,45 @@ func (q *Queries) CreateCreditTransaction(ctx context.Context, arg CreateCreditT
 		&i.Amount,
 		&i.TransactionType,
 		&i.Description,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createProperty = `-- name: CreateProperty :one
+INSERT INTO properties (
+  owner_id,
+  address,
+  rental_type,
+  details
+) VALUES (
+  $1, $2, $3, $4
+)
+RETURNING id, owner_id, address, rental_type, details, is_active, created_at
+`
+
+type CreatePropertyParams struct {
+	OwnerID    pgtype.Int4  `json:"owner_id"`
+	Address    string       `json:"address"`
+	RentalType PropertyType `json:"rental_type"`
+	Details    []byte       `json:"details"`
+}
+
+func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error) {
+	row := q.db.QueryRow(ctx, createProperty,
+		arg.OwnerID,
+		arg.Address,
+		arg.RentalType,
+		arg.Details,
+	)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Address,
+		&i.RentalType,
+		&i.Details,
+		&i.IsActive,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -88,6 +139,94 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 	return i, err
 }
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (
+  email,
+  password_hash,
+  first_name,
+  last_name,
+  phone_number
+) VALUES (
+  $1, $2, $3, $4, $5
+)
+RETURNING id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at
+`
+
+type CreateUserParams struct {
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	FirstName    pgtype.Text `json:"first_name"`
+	LastName     pgtype.Text `json:"last_name"`
+	PhoneNumber  pgtype.Text `json:"phone_number"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.FirstName,
+		arg.LastName,
+		arg.PhoneNumber,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FirstName,
+		&i.LastName,
+		&i.PhoneNumber,
+		&i.IsVerified,
+		&i.StripeCustomerID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at FROM users
+WHERE email = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FirstName,
+		&i.LastName,
+		&i.PhoneNumber,
+		&i.IsVerified,
+		&i.StripeCustomerID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserById = `-- name: GetUserById :one
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at FROM users
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserById(ctx context.Context, id int32) (User, error) {
+	row := q.db.QueryRow(ctx, getUserById, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FirstName,
+		&i.LastName,
+		&i.PhoneNumber,
+		&i.IsVerified,
+		&i.StripeCustomerID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserCreditBalance = `-- name: GetUserCreditBalance :one
 SELECT current_balance::int FROM view_user_credit_balance
 WHERE user_id = $1
@@ -122,4 +261,38 @@ func (q *Queries) GetUserSubscription(ctx context.Context, userID pgtype.Int4) (
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
+SELECT id, owner_id, address, rental_type, details, is_active, created_at FROM properties
+WHERE owner_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error) {
+	rows, err := q.db.Query(ctx, listPropertiesByOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Property
+	for rows.Next() {
+		var i Property
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Address,
+			&i.RentalType,
+			&i.Details,
+			&i.IsActive,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
