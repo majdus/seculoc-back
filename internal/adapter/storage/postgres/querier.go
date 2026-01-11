@@ -15,6 +15,7 @@ type Querier interface {
 	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CreateCreditTransaction(ctx context.Context, arg CreateCreditTransactionParams) (CreditTransaction, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
+	CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)

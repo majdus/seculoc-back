@@ -75,6 +75,11 @@ func (m *MockQuerier) UpdateSubscriptionLimit(ctx context.Context, arg postgres.
 	return args.Error(0)
 }
 
+func (m *MockQuerier) CreateSolvencyCheck(ctx context.Context, arg postgres.CreateSolvencyCheckParams) (postgres.SolvencyCheck, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.SolvencyCheck), args.Error(1)
+}
+
 // MockTxManager handles transaction beginning
 type MockTxManager struct {
 	mock.Mock

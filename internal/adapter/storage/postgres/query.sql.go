@@ -114,6 +114,38 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 	return i, err
 }
 
+const createSolvencyCheck = `-- name: CreateSolvencyCheck :one
+INSERT INTO solvency_checks (
+    initiator_owner_id, candidate_email, property_id, status
+) VALUES (
+    $1, $2, $3, 'pending'
+)
+RETURNING id, initiator_owner_id, candidate_email, property_id, status, score_result, report_url, documents_json, created_at
+`
+
+type CreateSolvencyCheckParams struct {
+	InitiatorOwnerID pgtype.Int4 `json:"initiator_owner_id"`
+	CandidateEmail   string      `json:"candidate_email"`
+	PropertyID       pgtype.Int4 `json:"property_id"`
+}
+
+func (q *Queries) CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error) {
+	row := q.db.QueryRow(ctx, createSolvencyCheck, arg.InitiatorOwnerID, arg.CandidateEmail, arg.PropertyID)
+	var i SolvencyCheck
+	err := row.Scan(
+		&i.ID,
+		&i.InitiatorOwnerID,
+		&i.CandidateEmail,
+		&i.PropertyID,
+		&i.Status,
+		&i.ScoreResult,
+		&i.ReportUrl,
+		&i.DocumentsJson,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscriptions (
     user_id, plan_type, frequency, start_date, end_date, max_properties_limit

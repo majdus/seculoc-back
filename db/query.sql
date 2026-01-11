@@ -49,11 +49,11 @@ WHERE user_id = $1 AND status = 'active';
 
 -- name: CreateSolvencyCheck :one
 INSERT INTO solvency_checks (
-    user_id, status
+    initiator_owner_id, candidate_email, property_id, status
 ) VALUES (
-    $1, 'pending'
+    $1, $2, $3, 'pending'
 )
-RETURNING id, user_id, status, created_at;
+RETURNING *;
 
 -- name: CreateSubscription :one
 INSERT INTO subscriptions (
