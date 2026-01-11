@@ -23,6 +23,23 @@ func (q *Queries) CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int
 	return count, err
 }
 
+const countPropertiesByOwnerAndType = `-- name: CountPropertiesByOwnerAndType :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND rental_type = $2 AND is_active = true
+`
+
+type CountPropertiesByOwnerAndTypeParams struct {
+	OwnerID    pgtype.Int4  `json:"owner_id"`
+	RentalType PropertyType `json:"rental_type"`
+}
+
+func (q *Queries) CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPropertiesByOwnerAndType, arg.OwnerID, arg.RentalType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCreditTransaction = `-- name: CreateCreditTransaction :one
 INSERT INTO credit_transactions (
     user_id, amount, transaction_type, description
@@ -295,4 +312,20 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateSubscriptionLimit = `-- name: UpdateSubscriptionLimit :exec
+UPDATE subscriptions
+SET max_properties_limit = max_properties_limit + $2
+WHERE user_id = $1 AND status = 'active'
+`
+
+type UpdateSubscriptionLimitParams struct {
+	UserID             pgtype.Int4 `json:"user_id"`
+	MaxPropertiesLimit pgtype.Int4 `json:"max_properties_limit"`
+}
+
+func (q *Queries) UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error {
+	_, err := q.db.Exec(ctx, updateSubscriptionLimit, arg.UserID, arg.MaxPropertiesLimit)
+	return err
 }

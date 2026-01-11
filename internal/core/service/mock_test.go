@@ -65,6 +65,16 @@ func (m *MockQuerier) CountPropertiesByOwner(ctx context.Context, ownerID pgtype
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockQuerier) CountPropertiesByOwnerAndType(ctx context.Context, arg postgres.CountPropertiesByOwnerAndTypeParams) (int64, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockQuerier) UpdateSubscriptionLimit(ctx context.Context, arg postgres.UpdateSubscriptionLimitParams) error {
+	args := m.Called(ctx, arg)
+	return args.Error(0)
+}
+
 // MockTxManager handles transaction beginning
 type MockTxManager struct {
 	mock.Mock

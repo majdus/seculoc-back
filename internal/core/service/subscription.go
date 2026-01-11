@@ -109,3 +109,43 @@ func (s *SubscriptionService) SubscribeUser(ctx context.Context, userID int32, p
 
 	return nil
 }
+
+// IncreaseLimit allows Serenity and Premium users to add property slots for 9.90/unit.
+func (s *SubscriptionService) IncreaseLimit(ctx context.Context, userID int32, additionalProperties int32) error {
+	log := logger.FromContext(ctx)
+
+	return s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		// 1. Get Subscription
+		sub, err := q.GetUserSubscription(ctx, pgtype.Int4{Int32: userID, Valid: true})
+		if err != nil {
+			return err
+		}
+
+		// 2. Eligibility Check
+		if sub.PlanType != postgres.SubPlanSerenity && sub.PlanType != postgres.SubPlanPremium {
+			return fmt.Errorf("plan not eligible for limit increase (current: %s)", sub.PlanType)
+		}
+
+		// 3. Cost Calculation
+		// 9.90 EUR per property.
+		cost := 9.90 * float64(additionalProperties)
+
+		// 4. Update Limit
+		err = q.UpdateSubscriptionLimit(ctx, postgres.UpdateSubscriptionLimitParams{
+			UserID:             pgtype.Int4{Int32: userID, Valid: true},
+			MaxPropertiesLimit: pgtype.Int4{Int32: additionalProperties, Valid: true},
+		})
+		if err != nil {
+			return err
+		}
+
+		// 5. Log Billing Event (Future: Insert into Transactions/Invoice)
+		log.Info("subscription limit increased",
+			zap.Int("user_id", int(userID)),
+			zap.Int("added_slots", int(additionalProperties)),
+			zap.Float64("additional_monthly_cost", cost),
+		)
+
+		return nil
+	})
+}

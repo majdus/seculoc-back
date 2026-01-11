@@ -38,28 +38,7 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 		return nil, err
 	}
 
-	// 2. Check Quota
-	// If limit is 0 (e.g. Free plan discovery potentially?), but schema says default 0.
-	// Let's assume 0 means NO properties allowed, or infinite?
-	// Usually 0 means 0. For infinite we'd use -1 or NULL.
-	limit := sub.MaxPropertiesLimit.Int32
-
-	currentCount, err := s.q.CountPropertiesByOwner(ctx, pgtype.Int4{Int32: userID, Valid: true})
-	if err != nil {
-		return nil, err
-	}
-
-	if currentCount >= int64(limit) {
-		log.Warn("create property failed: quota exceeded",
-			zap.Int("user_id", int(userID)),
-			zap.Int("limit", int(limit)),
-			zap.Int64("current_count", currentCount),
-		)
-		return nil, fmt.Errorf("property quota exceeded for current plan")
-	}
-
-	// 3. Create Property
-	// Map string to Enum
+	// 2. Determine Property Type
 	var pType postgres.PropertyType
 	switch rentalType {
 	case "long_term":
@@ -70,17 +49,39 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 		return nil, fmt.Errorf("invalid rental type: %s", rentalType)
 	}
 
-	// Details JSON (pgtype.Text for now, or []byte for JSONB? generated code uses []byte usually for JSONB, or pgtype.JSONB?)
-	// Check models.go... sqlc usually generates []byte for JSONB if not overriden.
-	// Let's stick with CreatePropertyParams from generated code.
-	// We'll see what the compiler says about `Details`.
+	// 3. Check Quota Logic
+	// Rule: Seasonal is always allowed (Unlimited).
+	// Rule: Long Term is restricted by plan limit.
+	if pType == postgres.PropertyTypeLongTerm {
+		limit := sub.MaxPropertiesLimit.Int32
 
+		currentCount, err := s.q.CountPropertiesByOwnerAndType(ctx, postgres.CountPropertiesByOwnerAndTypeParams{
+			OwnerID:    pgtype.Int4{Int32: userID, Valid: true},
+			RentalType: pType,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if currentCount >= int64(limit) {
+			log.Warn("create property failed: quota exceeded",
+				zap.Int("user_id", int(userID)),
+				zap.Int("limit", int(limit)),
+				zap.Int64("current_count", currentCount),
+				zap.String("type", rentalType),
+			)
+			return nil, fmt.Errorf("property quota exceeded for current plan")
+		}
+	} else {
+		log.Debug("seasonal property creation - skipping quota check", zap.Int("user_id", int(userID)))
+	}
+
+	// 4. Create Property
 	prop, err := s.q.CreateProperty(ctx, postgres.CreatePropertyParams{
 		OwnerID:    pgtype.Int4{Int32: userID, Valid: true},
 		Address:    address,
 		RentalType: pType,
-		// Details: ... we need to check the generated struct
-		Details: []byte(detailsJSON),
+		Details:    []byte(detailsJSON),
 	})
 	if err != nil {
 		log.Error("create property failed: db error", zap.Error(err))

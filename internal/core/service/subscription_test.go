@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -56,7 +57,6 @@ func TestSubscribeUser_TransactionFailure_LogsError(t *testing.T) {
 	assert.Equal(t, int64(123), fieldMap["user_id"])
 	assert.Equal(t, "premium", fieldMap["plan"])
 	// Error field might be cleaner to check with assert.Contains if it's a string, or just presence
-	// Error field might be cleaner to check with assert.Contains if it's a string, or just presence
 	assert.NotNil(t, fieldMap["error"])
 }
 
@@ -104,4 +104,69 @@ func TestSubscribeUser_Success_LogsInfo(t *testing.T) {
 	fieldMap := logs.All()[0].ContextMap()
 	assert.Equal(t, int64(123), fieldMap["user_id"])
 	assert.Equal(t, "premium", fieldMap["plan"])
+}
+
+func TestIncreaseLimit_Success(t *testing.T) {
+	// Setup
+	mockTx := new(MockTxManager)
+	mockQuerier := new(MockQuerier)
+	svc := NewSubscriptionService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+
+	// Mock 1: Get Subscription (Must be Serenity or Premium)
+	activeSub := postgres.Subscription{
+		ID:       1,
+		UserID:   pgtype.Int4{Int32: userID, Valid: true},
+		PlanType: postgres.SubPlanSerenity,
+		Status:   pgtype.Text{String: "active", Valid: true},
+	}
+	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(activeSub, nil)
+
+	// Mock 2: Update Limit
+	mockQuerier.On("UpdateSubscriptionLimit", mock.Anything, mock.MatchedBy(func(arg postgres.UpdateSubscriptionLimitParams) bool {
+		return arg.UserID.Int32 == userID && arg.MaxPropertiesLimit.Int32 == 1
+	})).Return(nil)
+
+	// WithTx
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	// Execute
+	err := svc.IncreaseLimit(ctx, userID, 1) // Add 1 slot
+
+	// Assert
+	assert.NoError(t, err)
+}
+
+func TestIncreaseLimit_NotEligible(t *testing.T) {
+	// Setup
+	mockTx := new(MockTxManager)
+	mockQuerier := new(MockQuerier)
+	svc := NewSubscriptionService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+
+	// Mock 1: Get Subscription (Discovery - Not Eligible)
+	activeSub := postgres.Subscription{
+		ID:       1,
+		UserID:   pgtype.Int4{Int32: userID, Valid: true},
+		PlanType: postgres.SubPlanDiscovery,
+		Status:   pgtype.Text{String: "active", Valid: true},
+	}
+	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(activeSub, nil)
+
+	// WithTx
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("plan not eligible")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		// Simulating failure inside Tx logic
+		_ = fn(mockQuerier)
+	})
+
+	err := svc.IncreaseLimit(ctx, userID, 1)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "plan not eligible")
 }

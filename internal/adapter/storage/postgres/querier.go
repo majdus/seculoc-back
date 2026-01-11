@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error)
+	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CreateCreditTransaction(ctx context.Context, arg CreateCreditTransactionParams) (CreditTransaction, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
@@ -21,6 +22,7 @@ type Querier interface {
 	GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error)
 	GetUserSubscription(ctx context.Context, userID pgtype.Int4) (Subscription, error)
 	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
+	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error
 }
 
 var _ Querier = (*Queries)(nil)

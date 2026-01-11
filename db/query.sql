@@ -38,6 +38,23 @@ ORDER BY created_at DESC;
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND is_active = true;
 
+-- name: CountPropertiesByOwnerAndType :one
+SELECT COUNT(*) FROM properties
+WHERE owner_id = $1 AND rental_type = $2 AND is_active = true;
+
+-- name: UpdateSubscriptionLimit :exec
+UPDATE subscriptions
+SET max_properties_limit = max_properties_limit + $2
+WHERE user_id = $1 AND status = 'active';
+
+-- name: CreateSolvencyCheck :one
+INSERT INTO solvency_checks (
+    user_id, status
+) VALUES (
+    $1, 'pending'
+)
+RETURNING id, user_id, status, created_at;
+
 -- name: CreateSubscription :one
 INSERT INTO subscriptions (
     user_id, plan_type, frequency, start_date, end_date, max_properties_limit

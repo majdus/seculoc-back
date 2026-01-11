@@ -45,6 +45,11 @@ func TestCreateProperty_Success(t *testing.T) {
 		return arg.Address == "123 Street" && arg.RentalType == postgres.PropertyTypeLongTerm
 	})).Return(expectedProp, nil)
 
+	// Mock 2: Count Properties (Only called for LongTerm)
+	mockQuerier.On("CountPropertiesByOwnerAndType", mock.Anything, mock.MatchedBy(func(arg postgres.CountPropertiesByOwnerAndTypeParams) bool {
+		return arg.OwnerID.Int32 == userID && arg.RentalType == postgres.PropertyTypeLongTerm
+	})).Return(int64(2), nil) // 2 < 5 OK
+
 	// Execute
 	prop, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
 
@@ -53,14 +58,46 @@ func TestCreateProperty_Success(t *testing.T) {
 	assert.Equal(t, int32(1), prop.ID)
 }
 
-func TestCreateProperty_QuotaExceeded(t *testing.T) {
+func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
+	// Setup
+	mockQuerier := new(MockQuerier)
+	svc := NewPropertyService(mockQuerier, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+
+	// Mock 1: Get Subscription (Limit = 0, e.g. Free Plan)
+	activeSub := postgres.Subscription{
+		ID:                 1,
+		UserID:             pgtype.Int4{Int32: userID, Valid: true},
+		Status:             pgtype.Text{String: "active", Valid: true},
+		MaxPropertiesLimit: pgtype.Int4{Int32: 0, Valid: true},
+	}
+	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(activeSub, nil)
+
+	// No CountPropertiesByOwnerAndType call expected!
+
+	// Mock 2: Create
+	expectedProp := postgres.Property{
+		ID:         1,
+		RentalType: postgres.PropertyTypeSeasonal,
+	}
+	mockQuerier.On("CreateProperty", mock.Anything, mock.Anything).Return(expectedProp, nil)
+
+	// Execute
+	prop, err := svc.CreateProperty(ctx, userID, "Holiday Home", "seasonal", "{}")
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, postgres.PropertyTypeSeasonal, prop.RentalType)
+}
+
+func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	// Setup
 	core, observedLogs := observer.New(zap.WarnLevel)
 	testLogger := zap.New(core)
 	mockQuerier := new(MockQuerier)
 	svc := NewPropertyService(mockQuerier, testLogger)
 	ctx := context.Background()
-	// Inject logger
 	ctx = context.WithValue(ctx, "logger", testLogger)
 
 	userID := int32(1)
@@ -75,7 +112,9 @@ func TestCreateProperty_QuotaExceeded(t *testing.T) {
 	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(activeSub, nil)
 
 	// Mock 2: Count Properties (Current = 1) -> Reached Limit!
-	mockQuerier.On("CountPropertiesByOwner", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int64(1), nil)
+	mockQuerier.On("CountPropertiesByOwnerAndType", mock.Anything, mock.MatchedBy(func(arg postgres.CountPropertiesByOwnerAndTypeParams) bool {
+		return arg.OwnerID.Int32 == userID && arg.RentalType == postgres.PropertyTypeLongTerm
+	})).Return(int64(1), nil)
 
 	// Execute
 	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
