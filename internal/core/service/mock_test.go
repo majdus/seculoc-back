@@ -80,6 +80,11 @@ func (m *MockQuerier) CreateSolvencyCheck(ctx context.Context, arg postgres.Crea
 	return args.Get(0).(postgres.SolvencyCheck), args.Error(1)
 }
 
+func (m *MockQuerier) SoftDeleteProperty(ctx context.Context, arg postgres.SoftDeletePropertyParams) (int32, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(int32), args.Error(1)
+}
+
 // MockTxManager handles transaction beginning
 type MockTxManager struct {
 	mock.Mock

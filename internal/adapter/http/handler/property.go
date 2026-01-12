@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -95,4 +96,46 @@ func (h *PropertyHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, props)
+}
+
+// Delete godoc
+// @Summary      Delete a property
+// @Description  Soft delete a property belonging to the authenticated user
+// @Tags         properties
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Property ID"
+// @Success      204  {object}  nil
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /properties/{id} [delete]
+func (h *PropertyHandler) Delete(c *gin.Context) {
+	log := logger.FromContext(c.Request.Context())
+
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid property id"})
+		return
+	}
+
+	err = h.svc.DeleteProperty(c.Request.Context(), userID, int32(id))
+	if err != nil {
+		log.Warn("delete property failed", zap.Error(err))
+		if err.Error() == "property not found or access denied" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

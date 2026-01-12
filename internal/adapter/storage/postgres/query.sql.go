@@ -314,7 +314,7 @@ func (q *Queries) GetUserSubscription(ctx context.Context, userID pgtype.Int4) (
 
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
 SELECT id, owner_id, address, rental_type, details, is_active, created_at FROM properties
-WHERE owner_id = $1
+WHERE owner_id = $1 AND is_active = true
 ORDER BY created_at DESC
 `
 
@@ -344,6 +344,25 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteProperty = `-- name: SoftDeleteProperty :one
+UPDATE properties
+SET is_active = false
+WHERE id = $1 AND owner_id = $2 AND is_active = true
+RETURNING id
+`
+
+type SoftDeletePropertyParams struct {
+	ID      int32       `json:"id"`
+	OwnerID pgtype.Int4 `json:"owner_id"`
+}
+
+func (q *Queries) SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error) {
+	row := q.db.QueryRow(ctx, softDeleteProperty, arg.ID, arg.OwnerID)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const updateSubscriptionLimit = `-- name: UpdateSubscriptionLimit :exec

@@ -31,7 +31,7 @@ RETURNING *;
 
 -- name: ListPropertiesByOwner :many
 SELECT * FROM properties
-WHERE owner_id = $1
+WHERE owner_id = $1 AND is_active = true
 ORDER BY created_at DESC;
 
 -- name: CountPropertiesByOwner :one
@@ -41,6 +41,12 @@ WHERE owner_id = $1 AND is_active = true;
 -- name: CountPropertiesByOwnerAndType :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND rental_type = $2 AND is_active = true;
+
+-- name: SoftDeleteProperty :one
+UPDATE properties
+SET is_active = false
+WHERE id = $1 AND owner_id = $2 AND is_active = true
+RETURNING id;
 
 -- name: UpdateSubscriptionLimit :exec
 UPDATE subscriptions

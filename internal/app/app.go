@@ -62,6 +62,7 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 			// Properties
 			protected.POST("/properties", propHandler.Create)
 			protected.GET("/properties", propHandler.List)
+			protected.DELETE("/properties/:id", propHandler.Delete)
 
 			// Subscriptions
 			protected.POST("/subscriptions", subHandler.Subscribe)

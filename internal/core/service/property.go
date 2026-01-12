@@ -97,4 +97,38 @@ func (s *PropertyService) ListProperties(ctx context.Context, userID int32) ([]p
 		return err
 	})
 	return props, err
+
+}
+
+func (s *PropertyService) DeleteProperty(ctx context.Context, userID int32, propertyID int32) error {
+	log := logger.FromContext(ctx)
+
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		// Attempt to soft delete.
+		// If the property doesn't exist or doesn't belong to the user, no row will be returned/updated (depending on driver/sqlc behavior).
+		// efficient way: RETURNING id will help us know if it matched.
+		deletedID, err := q.SoftDeleteProperty(ctx, postgres.SoftDeletePropertyParams{
+			ID:      propertyID,
+			OwnerID: pgtype.Int4{Int32: userID, Valid: true},
+		})
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("property not found or access denied")
+			}
+			return err
+		}
+
+		// If we got here, deletedID is set (it's a scalar if :one).
+		// Wait, sqlc :one returns ErrNoRows if no rows are returned.
+		// So the check above covers the "not found / not owner" case.
+
+		log.Info("property soft deleted", zap.Int("property_id", int(deletedID)))
+		return nil
+	})
+
+	if err != nil {
+		log.Warn("delete property failed", zap.Error(err))
+		return err
+	}
+	return nil
 }
