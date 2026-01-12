@@ -83,3 +83,25 @@ func TestCreateSolvencyCheck_InsufficientCredits(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insufficient credits")
 }
+
+func TestPurchaseCredits_Success(t *testing.T) {
+	mockTx := new(MockTxManager)
+	mockQuerier := new(MockQuerier)
+	svc := NewSolvencyService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	mockQuerier.On("CreateCreditTransaction", mock.Anything, mock.MatchedBy(func(arg postgres.CreateCreditTransactionParams) bool {
+		return arg.UserID.Int32 == userID && arg.Amount == 20 && arg.TransactionType == "pack_purchase"
+	})).Return(postgres.CreditTransaction{}, nil)
+
+	amount, err := svc.PurchaseCredits(ctx, userID, "pack_20")
+
+	assert.NoError(t, err)
+	assert.Equal(t, int32(20), amount)
+}

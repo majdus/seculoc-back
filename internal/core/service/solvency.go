@@ -76,3 +76,45 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 
 	return &check, nil
 }
+
+// PurchaseCredits allows users to buy credit packs (e.g., 20 checks).
+func (s *SolvencyService) PurchaseCredits(ctx context.Context, userID int32, packType string) (int32, error) {
+	log := logger.FromContext(ctx)
+
+	var amount int32
+	var cost float64
+
+	switch packType {
+	case "pack_20":
+		amount = 20
+		cost = 19.90 // Assigning arbitrary price for logic completeness, e.g. 1€/unit approx
+	default:
+		return 0, fmt.Errorf("invalid pack type: %s", packType)
+	}
+
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		_, err := q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
+			UserID:          pgtype.Int4{Int32: userID, Valid: true},
+			Amount:          amount,
+			TransactionType: "pack_purchase",
+			Description:     pgtype.Text{String: fmt.Sprintf("Purchase %s", packType), Valid: true},
+		})
+		if err != nil {
+			return err
+		}
+
+		log.Info("credit pack purchased",
+			zap.Int("user_id", int(userID)),
+			zap.String("pack", packType),
+			zap.Int("amount_added", int(amount)),
+			zap.Float64("cost", cost),
+		)
+		return nil
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return amount, nil
+}
