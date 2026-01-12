@@ -29,7 +29,7 @@ type CreateCheckRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body CheckRequest true "Check Info"
+// @Param        request body map[string]interface{} true "Check Info"
 // @Success      201  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /solvency/check [post]
@@ -66,7 +66,7 @@ type BuyCreditsRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body CreditRequest true "Credit Pack Info"
+// @Param        request body map[string]interface{} true "Credit Pack Info"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /solvency/credits [post]

@@ -29,7 +29,7 @@ type SubscribeRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body SubscribeRequest true "Subscription Info"
+// @Param        request body map[string]interface{} true "Subscription Info"
 // @Success      201  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /subscriptions [post]
@@ -66,7 +66,7 @@ type UpgradeLimitRequest struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body IncreaseLimitRequest true "Limit Info"
+// @Param        request body map[string]interface{} true "Limit Info"
 // @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  map[string]string
 // @Router       /subscriptions/upgrade [post]
