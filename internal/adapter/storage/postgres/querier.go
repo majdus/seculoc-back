@@ -18,10 +18,12 @@ type Querier interface {
 	CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetProperty(ctx context.Context, id int32) (Property, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserById(ctx context.Context, id int32) (User, error)
 	GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error)
 	GetUserSubscription(ctx context.Context, userID pgtype.Int4) (Subscription, error)
+	HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error)
 	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
 	SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error)
 	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error

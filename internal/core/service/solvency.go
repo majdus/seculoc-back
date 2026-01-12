@@ -45,7 +45,21 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 			return fmt.Errorf("insufficient credits for solvency check")
 		}
 
-		// 2. Consume Credit (Create Transaction)
+		// 2. Verify Ownership
+		// Security Fix: Prevent checking properties not owned by initiator
+		prop, err := q.GetProperty(ctx, propertyID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("property not found or access denied")
+			}
+			return err
+		}
+
+		if !prop.OwnerID.Valid || prop.OwnerID.Int32 != userID {
+			return fmt.Errorf("property not found or access denied")
+		}
+
+		// 3. Consume Credit (Create Transaction)
 		// Amount is -1 (Cost of 1 check)
 		_, err = q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
 			UserID:          pgtype.Int4{Int32: userID, Valid: true},

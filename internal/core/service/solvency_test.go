@@ -25,12 +25,19 @@ func TestCreateSolvencyCheck_Success(t *testing.T) {
 	// Mock 1: Get Balance (Must be > 0)
 	mockQuerier.On("GetUserCreditBalance", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int32(5), nil)
 
-	// Mock 2: Create Debit Transaction (-1)
+	// Mock 2: Get Property (Ownership Check)
+	ownedProp := postgres.Property{
+		ID:      propID,
+		OwnerID: pgtype.Int4{Int32: userID, Valid: true},
+	}
+	mockQuerier.On("GetProperty", mock.Anything, propID).Return(ownedProp, nil)
+
+	// Mock 3: Create Debit Transaction (-1)
 	mockQuerier.On("CreateCreditTransaction", mock.Anything, mock.MatchedBy(func(arg postgres.CreateCreditTransactionParams) bool {
 		return arg.UserID.Int32 == userID && arg.Amount == -1 && arg.TransactionType == "check_usage"
 	})).Return(postgres.CreditTransaction{}, nil)
 
-	// Mock 3: Create Solvency Check
+	// Mock 4: Create Solvency Check
 	expectedCheck := postgres.SolvencyCheck{
 		ID:               100,
 		InitiatorOwnerID: pgtype.Int4{Int32: userID, Valid: true},
@@ -52,6 +59,38 @@ func TestCreateSolvencyCheck_Success(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, int32(100), check.ID)
+}
+
+func TestCreateSolvencyCheck_NotOwner(t *testing.T) {
+	mockTx := new(MockTxManager)
+	mockQuerier := new(MockQuerier)
+	svc := NewSolvencyService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+	propID := int32(99)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("property not found or access denied")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+
+		// 1. Balance OK
+		mockQuerier.On("GetUserCreditBalance", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int32(5), nil)
+
+		// 2. Get Property - Returns property owned by SOMEONE ELSE (ID 2)
+		otherProp := postgres.Property{
+			ID:      propID,
+			OwnerID: pgtype.Int4{Int32: 2, Valid: true},
+		}
+		mockQuerier.On("GetProperty", mock.Anything, propID).Return(otherProp, nil)
+
+		_ = fn(mockQuerier)
+	})
+
+	// Execute
+	_, err := svc.RetrieveCheck(ctx, userID, "hacker@test.com", propID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Equal(t, "property not found or access denied", err.Error())
 }
 
 func TestCreateSolvencyCheck_InsufficientCredits(t *testing.T) {

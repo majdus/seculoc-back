@@ -18,6 +18,10 @@ WHERE email = $1 LIMIT 1;
 SELECT * FROM users
 WHERE id = $1 LIMIT 1;
 
+-- name: GetProperty :one
+SELECT * FROM properties
+WHERE id = $1 LIMIT 1;
+
 -- name: CreateProperty :one
 INSERT INTO properties (
   owner_id,
@@ -86,3 +90,9 @@ LIMIT 1;
 -- name: GetUserCreditBalance :one
 SELECT current_balance::int FROM view_user_credit_balance
 WHERE user_id = $1;
+
+-- name: HasReceivedInitialBonus :one
+SELECT EXISTS(
+    SELECT 1 FROM credit_transactions
+    WHERE user_id = $1 AND transaction_type = 'initial_free'
+);

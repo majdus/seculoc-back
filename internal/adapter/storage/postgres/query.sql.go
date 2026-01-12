@@ -232,6 +232,26 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const getProperty = `-- name: GetProperty :one
+SELECT id, owner_id, address, rental_type, details, is_active, created_at FROM properties
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
+	row := q.db.QueryRow(ctx, getProperty, id)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Address,
+		&i.RentalType,
+		&i.Details,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at FROM users
 WHERE email = $1 LIMIT 1
@@ -310,6 +330,20 @@ func (q *Queries) GetUserSubscription(ctx context.Context, userID pgtype.Int4) (
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const hasReceivedInitialBonus = `-- name: HasReceivedInitialBonus :one
+SELECT EXISTS(
+    SELECT 1 FROM credit_transactions
+    WHERE user_id = $1 AND transaction_type = 'initial_free'
+)
+`
+
+func (q *Queries) HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error) {
+	row := q.db.QueryRow(ctx, hasReceivedInitialBonus, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many

@@ -77,6 +77,29 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 		if err != nil {
 			return err
 		}
+
+		// 5. Initial Bonus (Discovery Plan + Long Term + First Time)
+		if sub.PlanType == postgres.SubPlanDiscovery && pType == postgres.PropertyTypeLongTerm {
+			hasBonus, err := q.HasReceivedInitialBonus(ctx, pgtype.Int4{Int32: userID, Valid: true})
+			if err != nil {
+				return err
+			}
+
+			if !hasBonus {
+				// Grant 3 credits
+				_, err = q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
+					UserID:          pgtype.Int4{Int32: userID, Valid: true},
+					Amount:          3,
+					TransactionType: "initial_free",
+					Description:     pgtype.Text{String: "Welcome Bonus: 3 credits", Valid: true},
+				})
+				if err != nil {
+					return err
+				}
+				log.Info("initial bonus granted", zap.Int("user_id", int(userID)))
+			}
+		}
+
 		return nil
 	})
 

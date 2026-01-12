@@ -60,6 +60,16 @@ func (m *MockQuerier) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.
 	return args.Get(0).([]postgres.Property), args.Error(1)
 }
 
+func (m *MockQuerier) GetProperty(ctx context.Context, id int32) (postgres.Property, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(postgres.Property), args.Error(1)
+}
+
+func (m *MockQuerier) HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).(bool), args.Error(1)
+}
+
 func (m *MockQuerier) CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error) {
 	args := m.Called(ctx, ownerID)
 	return args.Get(0).(int64), args.Error(1)

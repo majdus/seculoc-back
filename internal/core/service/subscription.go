@@ -50,7 +50,7 @@ func (s *SubscriptionService) SubscribeUser(ctx context.Context, userID int32, p
 		amount = 990
 	default:
 		planType = postgres.SubPlanDiscovery
-		maxProps = 0
+		maxProps = 1
 		amount = 0
 	}
 
