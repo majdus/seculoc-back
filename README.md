@@ -39,6 +39,44 @@
     ```
     Cela va lancer un conteneur PostgreSQL et **initialiser automatiquement la structure de la base de données** (via `db/schemas.sql`).
 
+## 🔑 Variables d'Environnement
+
+Le fichier `.env` configure l'application. Voici les clés principales :
+
+| Variable         | Description                                 | Défaut              |
+| :--------------- | :------------------------------------------ | :------------------ |
+| `SERVER_ADDRESS` | Port d'écoute du serveur                    | `:8080`             |
+| `DB_HOST`        | Hôte PostgreSQL                             | `localhost`         |
+| `DB_USER`        | Utilisateur BDD                             | `postgres`          |
+| `DB_PASSWORD`    | Mot de passe BDD                            | `password`          |
+| `DB_NAME`        | Nom de la BDD                               | `seculoc`           |
+| `JWT_SECRET`     | Clé secrète pour signer les tokens JWT      | `change_me_in_prod` |
+| `ENV`            | Environnement (`development`, `production`) | `development`       |
+
+## 📡 API Endpoints
+
+L'API expose les ressources suivantes sur `/api/v1`.
+
+### Authentification
+
+- `POST /api/v1/auth/register` : Inscription d'un nouvel utilisateur.
+- `POST /api/v1/auth/login` : Connexion (Retourne un JWT).
+
+### Properties (Protégé par JWT)
+
+- `POST /api/v1/properties` : Créer un bien (vérifie les quotas).
+- `GET /api/v1/properties` : Lister ses biens.
+
+### Subscriptions (Protégé par JWT)
+
+- `POST /api/v1/subscriptions` : Souscrire à un plan (Discovery, Serenity, Premium).
+- `POST /api/v1/subscriptions/upgrade` : Acheter des slots supplémentaires.
+
+### Solvency (Protégé par JWT)
+
+- `POST /api/v1/solvency/check` : Lancer une vérification de solvabilité (Coût : 1 crédit).
+- `POST /api/v1/solvency/credits` : Acheter des crédits (ex: "pack_20").
+
 ## ▶️ Démarrage
 
 Pour lancer le serveur backend :
@@ -57,6 +95,23 @@ Lancer la suite de tests unitaires :
 ```bash
 make test
 ```
+
+```bash
+make test
+```
+
+## 🧹 Qualité de Code
+
+Pour maintenir la base de code propre et standardisée :
+
+- **Formatage** :
+  ```bash
+  go fmt ./...
+  ```
+- **Analyse Statique (Linting)** :
+  ```bash
+  go vet ./...
+  ```
 
 ## 🏗 Commandes Utiles (Makefile)
 
