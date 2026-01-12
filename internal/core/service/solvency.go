@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
@@ -32,7 +33,11 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 		// 1. Check Credit Balance
 		balance, err := q.GetUserCreditBalance(ctx, pgtype.Int4{Int32: userID, Valid: true})
 		if err != nil {
-			return err
+			if err == pgx.ErrNoRows {
+				balance = 0
+			} else {
+				return err
+			}
 		}
 
 		if balance <= 0 {

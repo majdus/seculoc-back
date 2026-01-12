@@ -27,6 +27,16 @@ type RegisterRequest struct {
 	PhoneNumber string `json:"phone_number" binding:"required"`
 }
 
+// Register godoc
+// @Summary      Register a new user
+// @Description  Create a new user account
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body RegisterRequest true "Registration Info"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /auth/register [post]
 func (h *UserHandler) Register(c *gin.Context) {
 	log := logger.FromContext(c.Request.Context())
 	var req RegisterRequest
@@ -53,6 +63,17 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+// Login godoc
+// @Summary      Login user
+// @Description  Authenticate user and return JWT token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body LoginRequest true "Login Credentials"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Router       /auth/login [post]
 func (h *UserHandler) Login(c *gin.Context) {
 	log := logger.FromContext(c.Request.Context())
 	var req LoginRequest

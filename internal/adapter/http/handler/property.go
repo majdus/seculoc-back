@@ -26,6 +26,18 @@ type CreatePropertyRequest struct {
 	Details    map[string]interface{} `json:"details" binding:"required"`
 }
 
+// Create godoc
+// @Summary      Create a new property
+// @Description  Create a property listing (Long Term or Seasonal)
+// @Tags         properties
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body map[string]interface{} true "Property Info"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /properties [post]
 func (h *PropertyHandler) Create(c *gin.Context) {
 	log := logger.FromContext(c.Request.Context())
 
@@ -60,6 +72,15 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"property_id": prop.ID})
 }
 
+// List godoc
+// @Summary      List user properties
+// @Description  Get all properties belonging to the authenticated user
+// @Tags         properties
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   map[string]interface{}
+// @Router       /properties [get]
 func (h *PropertyHandler) List(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {

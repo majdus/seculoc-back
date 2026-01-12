@@ -22,6 +22,17 @@ type SubscribeRequest struct {
 	Frequency string `json:"frequency" binding:"required,oneof=monthly yearly"`
 }
 
+// Subscribe godoc
+// @Summary      Subscribe to a plan
+// @Description  Subscribe user to Discovery, Serenity, or Premium plan
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body SubscribeRequest true "Subscription Info"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /subscriptions [post]
 func (h *SubscriptionHandler) Subscribe(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
@@ -48,6 +59,17 @@ type UpgradeLimitRequest struct {
 	AdditionalSlots int32 `json:"additional_slots" binding:"required,min=1"`
 }
 
+// IncreaseLimit godoc
+// @Summary      Increase property limit
+// @Description  Purchase additional property slots (Serenity/Premium only)
+// @Tags         subscriptions
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body IncreaseLimitRequest true "Limit Info"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /subscriptions/upgrade [post]
 func (h *SubscriptionHandler) IncreaseLimit(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {

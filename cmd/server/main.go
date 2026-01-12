@@ -4,18 +4,34 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
-	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"seculoc-back/internal/adapter/http/handler"
-	"seculoc-back/internal/adapter/http/middleware"
-	"seculoc-back/internal/adapter/storage/postgres"
-	"seculoc-back/internal/core/service"
+	"seculoc-back/internal/app"
 	"seculoc-back/internal/platform/logger"
 )
+
+// @title           Seculoc API
+// @version         1.0
+// @description     Backend API for Seculoc, a rental management platform.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name    API Support
+// @contact.url     http://www.swagger.io/support
+// @contact.email   support@swagger.io
+
+// @license.name    Apache 2.0
+// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host            localhost:8080
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 
 func main() {
 	// 1. Initialize Configuration
@@ -25,12 +41,11 @@ func main() {
 	logger.Init(viper.GetString("ENV"))
 	log := logger.Get()
 	defer logger.Sync()
-	// Zap global is set inside Init/Get usually, but we can ensure it.
-	// Actually the logger package handles it.
 
 	log.Info("Starting Seculoc Backend...")
 
 	// 3. Database Connection
+	// Fallback/Default handling could vary, but here we expect env vars or .env
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		viper.GetString("DB_USER"),
 		viper.GetString("DB_PASSWORD"),
@@ -56,63 +71,10 @@ func main() {
 	}
 	log.Info("Database connected successfully")
 
-	// 4. Persistence Layer
-	txManager := postgres.NewTxManager(pool)
+	// 4. Start Server via App Wiring
+	r := app.NewServer(pool, log)
 
-	// 5. Service Layer
-	userService := service.NewUserService(txManager, log)
-	propService := service.NewPropertyService(txManager, log)
-	subService := service.NewSubscriptionService(txManager, log)
-	solvService := service.NewSolvencyService(txManager, log)
-
-	// 6. Adapters (Handlers)
-	userHandler := handler.NewUserHandler(userService)
-	propHandler := handler.NewPropertyHandler(propService)
-	subHandler := handler.NewSubscriptionHandler(subService)
-	solvHandler := handler.NewSolvencyHandler(solvService)
-
-	// 7. HTTP Router (Gin)
-	if viper.GetString("GIN_MODE") == "release" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-	r := gin.New()
-
-	// Middleware
-	r.Use(middleware.RequestLogger())
-	r.Use(gin.Recovery())
-
-	// Public Routes
-	api := r.Group("/api/v1")
-	{
-		authGroup := api.Group("/auth")
-		{
-			authGroup.POST("/register", userHandler.Register)
-			authGroup.POST("/login", userHandler.Login)
-		}
-
-		// Protected Routes
-		protected := api.Group("/")
-		protected.Use(middleware.AuthMiddleware())
-		{
-			// Properties
-			protected.POST("/properties", propHandler.Create)
-			protected.GET("/properties", propHandler.List)
-
-			// Subscriptions
-			protected.POST("/subscriptions", subHandler.Subscribe)
-			protected.POST("/subscriptions/upgrade", subHandler.IncreaseLimit)
-
-			// Solvency
-			protected.POST("/solvency/check", solvHandler.CreateCheck)
-		}
-	}
-
-	// Health Check
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	// 8. Start Server
+	// 5. Start Server
 	addr := viper.GetString("SERVER_ADDRESS")
 	if addr == "" {
 		addr = ":8080"
@@ -134,7 +96,8 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Println("No .env file found, relying on environment variables")
+		// Log warning but proceed if relying on system envs
+		fmt.Fprintf(os.Stderr, "Config file not found: %s \n", err)
 	}
 
 	// Set defaults

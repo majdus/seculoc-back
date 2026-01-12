@@ -22,6 +22,17 @@ type CreateCheckRequest struct {
 	PropertyID     int32  `json:"property_id" binding:"required"`
 }
 
+// CreateCheck godoc
+// @Summary      Initiate Solvency Check
+// @Description  Consume credit to run solvency check on candidate
+// @Tags         solvency
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body CheckRequest true "Check Info"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /solvency/check [post]
 func (h *SolvencyHandler) CreateCheck(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
@@ -48,6 +59,17 @@ type BuyCreditsRequest struct {
 	PackType string `json:"pack_type" binding:"required,oneof=pack_20"`
 }
 
+// BuyCredits godoc
+// @Summary      Purchase Credit Pack
+// @Description  Buy solvency check credits (e.g., pack_20)
+// @Tags         solvency
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body CreditRequest true "Credit Pack Info"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Router       /solvency/credits [post]
 func (h *SolvencyHandler) BuyCredits(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {

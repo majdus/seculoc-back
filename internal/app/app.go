@@ -1,0 +1,77 @@
+package app
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
+
+	"seculoc-back/internal/adapter/http/handler"
+	"seculoc-back/internal/adapter/http/middleware"
+	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/core/service"
+)
+
+// NewServer wires up the application and returns the Gin engine.
+func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
+	// 1. Persistence Layer (TxManager)
+	txManager := postgres.NewTxManager(pool)
+
+	// 2. Service Layer
+	userService := service.NewUserService(txManager, log)
+	propService := service.NewPropertyService(txManager, log)
+	subService := service.NewSubscriptionService(txManager, log)
+	solvService := service.NewSolvencyService(txManager, log)
+
+	// 3. Adapters (Handlers)
+	userHandler := handler.NewUserHandler(userService)
+	propHandler := handler.NewPropertyHandler(propService)
+	subHandler := handler.NewSubscriptionHandler(subService)
+	solvHandler := handler.NewSolvencyHandler(solvService)
+
+	// 4. HTTP Router (Gin)
+	if viper.GetString("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	r := gin.New()
+
+	// Middleware
+	r.Use(middleware.RequestLogger())
+	r.Use(gin.Recovery())
+
+	// Public Routes
+	api := r.Group("/api/v1")
+	{
+		authGroup := api.Group("/auth")
+		{
+			authGroup.POST("/register", userHandler.Register)
+			authGroup.POST("/login", userHandler.Login)
+		}
+
+		// Protected Routes
+		protected := api.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			// Properties
+			protected.POST("/properties", propHandler.Create)
+			protected.GET("/properties", propHandler.List)
+
+			// Subscriptions
+			protected.POST("/subscriptions", subHandler.Subscribe)
+			protected.POST("/subscriptions/upgrade", subHandler.IncreaseLimit)
+
+			// Solvency
+			protected.POST("/solvency/check", solvHandler.CreateCheck)
+			protected.POST("/solvency/credits", solvHandler.BuyCredits)
+		}
+	}
+
+	// Health Check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	return r
+}
