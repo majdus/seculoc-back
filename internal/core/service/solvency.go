@@ -30,23 +30,7 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 	var check postgres.SolvencyCheck
 
 	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
-		// 1. Check Credit Balance
-		balance, err := q.GetUserCreditBalance(ctx, pgtype.Int4{Int32: userID, Valid: true})
-		if err != nil {
-			if err == pgx.ErrNoRows {
-				balance = 0
-			} else {
-				return err
-			}
-		}
-
-		if balance <= 0 {
-			log.Warn("solvency check failed: insufficient credits", zap.Int("user_id", int(userID)), zap.Int("balance", int(balance)))
-			return fmt.Errorf("insufficient credits for solvency check")
-		}
-
-		// 2. Verify Ownership
-		// Security Fix: Prevent checking properties not owned by initiator
+		// 1. Verify Ownership & Get Property
 		prop, err := q.GetProperty(ctx, propertyID)
 		if err != nil {
 			if err == pgx.ErrNoRows {
@@ -59,16 +43,44 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 			return fmt.Errorf("property not found or access denied")
 		}
 
-		// 3. Consume Credit (Create Transaction)
-		// Amount is -1 (Cost of 1 check)
-		_, err = q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
-			UserID:          pgtype.Int4{Int32: userID, Valid: true},
-			Amount:          -1,
-			TransactionType: "check_usage",
-			Description:     pgtype.Text{String: "Solvency Check Request", Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to deduct credit: %w", err)
+		// 2. Hybrid Credit Deduction
+		usedSource := "global"
+		if prop.VacancyCredits > 0 {
+			err = q.DecreasePropertyCredits(ctx, propertyID)
+			if err != nil {
+				return fmt.Errorf("failed to deduct property credit: %w", err)
+			}
+			usedSource = "property"
+		} else {
+			// Fallback to Global Credits
+			balance, err := q.GetUserCreditBalance(ctx, pgtype.Int4{Int32: userID, Valid: true})
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					balance = 0
+				} else {
+					return err
+				}
+			}
+
+			if balance <= 0 {
+				log.Warn("solvency check failed: insufficient credits",
+					zap.Int("user_id", int(userID)),
+					zap.Int("prop_id", int(propertyID)),
+					zap.Int32("vacancy_credits", prop.VacancyCredits),
+					zap.Int("global_balance", int(balance)))
+				return fmt.Errorf("insufficient credits for solvency check")
+			}
+
+			// Consume Global Credit
+			_, err = q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
+				UserID:          pgtype.Int4{Int32: userID, Valid: true},
+				Amount:          -1,
+				TransactionType: "check_usage",
+				Description:     pgtype.Text{String: "Solvency Check Request (Global Wallet)", Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to deduct global credit: %w", err)
+			}
 		}
 
 		// 3. Create Solvency Check
@@ -85,6 +97,7 @@ func (s *SolvencyService) RetrieveCheck(ctx context.Context, userID int32, candi
 			zap.Int("user_id", int(userID)),
 			zap.Int("check_id", int(check.ID)),
 			zap.String("candidate", candidateEmail),
+			zap.String("credit_source", usedSource),
 		)
 		return nil
 	})

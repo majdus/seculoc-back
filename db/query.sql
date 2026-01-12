@@ -4,11 +4,17 @@ INSERT INTO users (
   password_hash,
   first_name,
   last_name,
-  phone_number
+  phone_number,
+  last_context_used
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
+
+-- name: UpdateLastContext :exec
+UPDATE users
+SET last_context_used = $2
+WHERE id = $1;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users
@@ -32,6 +38,12 @@ INSERT INTO properties (
   $1, $2, $3, $4
 )
 RETURNING *;
+
+-- name: DecreasePropertyCredits :exec
+UPDATE properties
+SET vacancy_credits = vacancy_credits - 1
+WHERE id = $1 AND vacancy_credits > 0;
+
 
 -- name: ListPropertiesByOwner :many
 SELECT * FROM properties
@@ -96,3 +108,33 @@ SELECT EXISTS(
     SELECT 1 FROM credit_transactions
     WHERE user_id = $1 AND transaction_type = 'initial_free'
 );
+
+-- name: CreateInvitation :one
+INSERT INTO lease_invitations (property_id, owner_id, tenant_email, token, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetInvitationByToken :one
+SELECT * FROM lease_invitations
+WHERE token = $1 LIMIT 1;
+
+-- name: UpdateInvitationStatus :exec
+UPDATE lease_invitations
+SET status = $2
+WHERE id = $1;
+
+-- name: CountLeasesByTenant :one
+SELECT COUNT(*) FROM leases
+WHERE tenant_id = $1 AND lease_status != 'terminated';
+
+-- name: CountBookingsByTenant :one
+SELECT COUNT(*) FROM seasonal_bookings
+WHERE tenant_id = $1 AND booking_status = 'confirmed';
+
+-- name: CreateLease :one
+INSERT INTO leases (
+    property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status
+) VALUES (
+    $1, $2, $3, $4, $5, 'draft'
+)
+RETURNING *;

@@ -22,6 +22,7 @@ CREATE TABLE users (
     phone_number VARCHAR(20),
     is_verified BOOLEAN DEFAULT FALSE, -- KYC de l'utilisateur lui-même
     stripe_customer_id VARCHAR(100), -- Pour les prélèvements abonnements/packs
+    last_context_used VARCHAR(50) DEFAULT 'owner', -- 'owner' or 'tenant'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -73,6 +74,7 @@ CREATE TABLE properties (
     address TEXT NOT NULL,
     rental_type property_type NOT NULL, -- Longue durée ou Saisonnier [cite: 5]
     details JSONB, -- Surface, nbr pièces, description
+    vacancy_credits INTEGER NOT NULL DEFAULT 20,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -156,5 +158,20 @@ CREATE TABLE transactions (
     direction VARCHAR(10), -- 'inbound' (Locataire -> Séculoc), 'outbound' (Séculoc -> Proprio)
     stripe_payment_intent_id VARCHAR(100),
     status VARCHAR(50) DEFAULT 'success',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================
+-- 9. GESTION DES INVITATIONS & ONBOARDING LOCATAIRES
+-- =============================================
+
+CREATE TABLE lease_invitations (
+    id SERIAL PRIMARY KEY,
+    property_id INT NOT NULL REFERENCES properties(id),
+    owner_id INT NOT NULL REFERENCES users(id), -- L'expéditeur
+    tenant_email VARCHAR(255) NOT NULL, -- Le destinataire
+    token VARCHAR(255) UNIQUE NOT NULL, -- Token sécurisé envoyé par mail
+    status VARCHAR(50) DEFAULT 'pending', -- pending, accepted, expired, revoked
+    expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

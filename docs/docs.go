@@ -28,6 +28,7 @@ const docTemplate = `{
             "post": {
                 "description": "Authenticate user and return JWT token",
                 "consumes": [
+                    "application/json",
                     "application/json"
                 ],
                 "produces": [
@@ -52,10 +53,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/handler.LoginResponse"
                         }
                     },
                     "400": {
@@ -109,6 +107,144 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/switch-context": {
+            "post": {
+                "description": "Switch between owner and tenant context",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Switch user context",
+                "parameters": [
+                    {
+                        "description": "Context Info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.SwitchContextRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/invitations": {
+            "post": {
+                "description": "Send an invitation to a tenant",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "invitations"
+                ],
+                "summary": "Invite a tenant",
+                "parameters": [
+                    {
+                        "description": "Invitation Info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.InviteTenantRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/invitations/accept": {
+            "post": {
+                "description": "Accept a tenant invitation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "invitations"
+                ],
+                "summary": "Accept an invitation",
+                "parameters": [
+                    {
+                        "description": "Token",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.AcceptInvitationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "400": {
@@ -187,9 +323,60 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/handler.PropertyResponse"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/properties/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soft delete a property belonging to the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "properties"
+                ],
+                "summary": "Delete a property",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Property ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -343,11 +530,10 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "200": {
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/handler.SubscriptionResponse"
                         }
                     },
                     "400": {
@@ -414,6 +600,32 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handler.AcceptInvitationRequest": {
+            "type": "object",
+            "required": [
+                "token"
+            ],
+            "properties": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.InviteTenantRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "property_id"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "property_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "handler.LoginRequest": {
             "type": "object",
             "required": [
@@ -429,6 +641,79 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "$ref": "#/definitions/service.Capabilities"
+                },
+                "current_context": {
+                    "$ref": "#/definitions/service.UserContext"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "object",
+                    "properties": {
+                        "email": {
+                            "type": "string"
+                        },
+                        "first_name": {
+                            "type": "string"
+                        },
+                        "id": {
+                            "type": "integer"
+                        },
+                        "is_verified": {
+                            "type": "boolean"
+                        },
+                        "last_name": {
+                            "type": "string"
+                        },
+                        "owner_profile": {
+                            "$ref": "#/definitions/service.UserProfile"
+                        },
+                        "phone": {
+                            "type": "string"
+                        },
+                        "stripe_customer_id": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "handler.PropertyResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "rental_type": {
+                    "type": "string"
+                },
+                "vacancy_credits": {
+                    "type": "integer"
+                }
+            }
+        },
         "handler.RegisterRequest": {
             "type": "object",
             "required": [
@@ -436,13 +721,17 @@ const docTemplate = `{
                 "first_name",
                 "last_name",
                 "password",
-                "phone_number"
+                "phone"
             ],
             "properties": {
                 "email": {
                     "type": "string"
                 },
                 "first_name": {
+                    "type": "string"
+                },
+                "invite_token": {
+                    "description": "Optional",
                     "type": "string"
                 },
                 "last_name": {
@@ -452,8 +741,123 @@ const docTemplate = `{
                     "type": "string",
                     "minLength": 8
                 },
-                "phone_number": {
+                "phone": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.SubscriptionResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "user": {
+                            "type": "object",
+                            "properties": {
+                                "email": {
+                                    "type": "string"
+                                },
+                                "first_name": {
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "is_verified": {
+                                    "type": "boolean"
+                                },
+                                "last_name": {
+                                    "type": "string"
+                                },
+                                "owner_profile": {
+                                    "$ref": "#/definitions/service.UserProfile"
+                                },
+                                "phone": {
+                                    "type": "string"
+                                },
+                                "stripe_customer_id": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.SwitchContextRequest": {
+            "type": "object",
+            "required": [
+                "target_context"
+            ],
+            "properties": {
+                "target_context": {
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "tenant"
+                    ]
+                }
+            }
+        },
+        "service.Capabilities": {
+            "type": "object",
+            "properties": {
+                "can_act_as_owner": {
+                    "type": "boolean"
+                },
+                "can_act_as_tenant": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "service.SubscriptionDTO": {
+            "type": "object",
+            "properties": {
+                "end_date": {
+                    "type": "string"
+                },
+                "frequency": {
+                    "type": "string"
+                },
+                "max_properties_limit": {
+                    "type": "integer"
+                },
+                "plan_type": {
+                    "type": "string"
+                },
+                "start_date": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "service.UserContext": {
+            "type": "string",
+            "enum": [
+                "owner",
+                "tenant",
+                "none"
+            ],
+            "x-enum-varnames": [
+                "ContextOwner",
+                "ContextTenant",
+                "ContextNone"
+            ]
+        },
+        "service.UserProfile": {
+            "type": "object",
+            "properties": {
+                "credit_balance": {
+                    "type": "integer"
+                },
+                "subscription": {
+                    "$ref": "#/definitions/service.SubscriptionDTO"
                 }
             }
         }

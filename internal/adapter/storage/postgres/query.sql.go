@@ -11,6 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countBookingsByTenant = `-- name: CountBookingsByTenant :one
+SELECT COUNT(*) FROM seasonal_bookings
+WHERE tenant_id = $1 AND booking_status = 'confirmed'
+`
+
+func (q *Queries) CountBookingsByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error) {
+	row := q.db.QueryRow(ctx, countBookingsByTenant, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLeasesByTenant = `-- name: CountLeasesByTenant :one
+SELECT COUNT(*) FROM leases
+WHERE tenant_id = $1 AND lease_status != 'terminated'
+`
+
+func (q *Queries) CountLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error) {
+	row := q.db.QueryRow(ctx, countLeasesByTenant, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPropertiesByOwner = `-- name: CountPropertiesByOwner :one
 SELECT COUNT(*) FROM properties
 WHERE owner_id = $1 AND is_active = true
@@ -75,6 +99,84 @@ func (q *Queries) CreateCreditTransaction(ctx context.Context, arg CreateCreditT
 	return i, err
 }
 
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO lease_invitations (property_id, owner_id, tenant_email, token, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, property_id, owner_id, tenant_email, token, status, expires_at, created_at
+`
+
+type CreateInvitationParams struct {
+	PropertyID  int32            `json:"property_id"`
+	OwnerID     int32            `json:"owner_id"`
+	TenantEmail string           `json:"tenant_email"`
+	Token       string           `json:"token"`
+	ExpiresAt   pgtype.Timestamp `json:"expires_at"`
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (LeaseInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.PropertyID,
+		arg.OwnerID,
+		arg.TenantEmail,
+		arg.Token,
+		arg.ExpiresAt,
+	)
+	var i LeaseInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.OwnerID,
+		&i.TenantEmail,
+		&i.Token,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createLease = `-- name: CreateLease :one
+INSERT INTO leases (
+    property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status
+) VALUES (
+    $1, $2, $3, $4, $5, 'draft'
+)
+RETURNING id, property_id, tenant_id, start_date, end_date, rent_amount, deposit_amount, lease_status, contract_url, escrow_deposit_status, created_at
+`
+
+type CreateLeaseParams struct {
+	PropertyID    pgtype.Int4    `json:"property_id"`
+	TenantID      pgtype.Int4    `json:"tenant_id"`
+	StartDate     pgtype.Date    `json:"start_date"`
+	RentAmount    pgtype.Numeric `json:"rent_amount"`
+	DepositAmount pgtype.Numeric `json:"deposit_amount"`
+}
+
+func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error) {
+	row := q.db.QueryRow(ctx, createLease,
+		arg.PropertyID,
+		arg.TenantID,
+		arg.StartDate,
+		arg.RentAmount,
+		arg.DepositAmount,
+	)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.TenantID,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmount,
+		&i.DepositAmount,
+		&i.LeaseStatus,
+		&i.ContractUrl,
+		&i.EscrowDepositStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (
   owner_id,
@@ -84,7 +186,7 @@ INSERT INTO properties (
 ) VALUES (
   $1, $2, $3, $4
 )
-RETURNING id, owner_id, address, rental_type, details, is_active, created_at
+RETURNING id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at
 `
 
 type CreatePropertyParams struct {
@@ -108,6 +210,7 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
+		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
 	)
@@ -194,19 +297,21 @@ INSERT INTO users (
   password_hash,
   first_name,
   last_name,
-  phone_number
+  phone_number,
+  last_context_used
 ) VALUES (
-  $1, $2, $3, $4, $5
+  $1, $2, $3, $4, $5, $6
 )
-RETURNING id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at
+RETURNING id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at
 `
 
 type CreateUserParams struct {
-	Email        string      `json:"email"`
-	PasswordHash string      `json:"password_hash"`
-	FirstName    pgtype.Text `json:"first_name"`
-	LastName     pgtype.Text `json:"last_name"`
-	PhoneNumber  pgtype.Text `json:"phone_number"`
+	Email           string      `json:"email"`
+	PasswordHash    string      `json:"password_hash"`
+	FirstName       pgtype.Text `json:"first_name"`
+	LastName        pgtype.Text `json:"last_name"`
+	PhoneNumber     pgtype.Text `json:"phone_number"`
+	LastContextUsed pgtype.Text `json:"last_context_used"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -216,6 +321,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.FirstName,
 		arg.LastName,
 		arg.PhoneNumber,
+		arg.LastContextUsed,
 	)
 	var i User
 	err := row.Scan(
@@ -227,13 +333,46 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.LastContextUsed,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const decreasePropertyCredits = `-- name: DecreasePropertyCredits :exec
+UPDATE properties
+SET vacancy_credits = vacancy_credits - 1
+WHERE id = $1 AND vacancy_credits > 0
+`
+
+func (q *Queries) DecreasePropertyCredits(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, decreasePropertyCredits, id)
+	return err
+}
+
+const getInvitationByToken = `-- name: GetInvitationByToken :one
+SELECT id, property_id, owner_id, tenant_email, token, status, expires_at, created_at FROM lease_invitations
+WHERE token = $1 LIMIT 1
+`
+
+func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (LeaseInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByToken, token)
+	var i LeaseInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.OwnerID,
+		&i.TenantEmail,
+		&i.Token,
+		&i.Status,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getProperty = `-- name: GetProperty :one
-SELECT id, owner_id, address, rental_type, details, is_active, created_at FROM properties
+SELECT id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1
 `
 
@@ -246,6 +385,7 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
+		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
 	)
@@ -253,7 +393,7 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at FROM users
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at FROM users
 WHERE email = $1 LIMIT 1
 `
 
@@ -269,13 +409,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.LastContextUsed,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, created_at FROM users
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -291,6 +432,7 @@ func (q *Queries) GetUserById(ctx context.Context, id int32) (User, error) {
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.LastContextUsed,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -347,7 +489,7 @@ func (q *Queries) HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int
 }
 
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
-SELECT id, owner_id, address, rental_type, details, is_active, created_at FROM properties
+SELECT id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at FROM properties
 WHERE owner_id = $1 AND is_active = true
 ORDER BY created_at DESC
 `
@@ -367,6 +509,7 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 			&i.Address,
 			&i.RentalType,
 			&i.Details,
+			&i.VacancyCredits,
 			&i.IsActive,
 			&i.CreatedAt,
 		); err != nil {
@@ -397,6 +540,38 @@ func (q *Queries) SoftDeleteProperty(ctx context.Context, arg SoftDeleteProperty
 	var id int32
 	err := row.Scan(&id)
 	return id, err
+}
+
+const updateInvitationStatus = `-- name: UpdateInvitationStatus :exec
+UPDATE lease_invitations
+SET status = $2
+WHERE id = $1
+`
+
+type UpdateInvitationStatusParams struct {
+	ID     int32       `json:"id"`
+	Status pgtype.Text `json:"status"`
+}
+
+func (q *Queries) UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error {
+	_, err := q.db.Exec(ctx, updateInvitationStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateLastContext = `-- name: UpdateLastContext :exec
+UPDATE users
+SET last_context_used = $2
+WHERE id = $1
+`
+
+type UpdateLastContextParams struct {
+	ID              int32       `json:"id"`
+	LastContextUsed pgtype.Text `json:"last_context_used"`
+}
+
+func (q *Queries) UpdateLastContext(ctx context.Context, arg UpdateLastContextParams) error {
+	_, err := q.db.Exec(ctx, updateLastContext, arg.ID, arg.LastContextUsed)
+	return err
 }
 
 const updateSubscriptionLimit = `-- name: UpdateSubscriptionLimit :exec

@@ -95,6 +95,46 @@ func (m *MockQuerier) SoftDeleteProperty(ctx context.Context, arg postgres.SoftD
 	return args.Get(0).(int32), args.Error(1)
 }
 
+func (m *MockQuerier) DecreasePropertyCredits(ctx context.Context, id int32) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockQuerier) CreateInvitation(ctx context.Context, arg postgres.CreateInvitationParams) (postgres.LeaseInvitation, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.LeaseInvitation), args.Error(1)
+}
+
+func (m *MockQuerier) GetInvitationByToken(ctx context.Context, token string) (postgres.LeaseInvitation, error) {
+	args := m.Called(ctx, token)
+	return args.Get(0).(postgres.LeaseInvitation), args.Error(1)
+}
+
+func (m *MockQuerier) UpdateInvitationStatus(ctx context.Context, arg postgres.UpdateInvitationStatusParams) error {
+	args := m.Called(ctx, arg)
+	return args.Error(0)
+}
+
+func (m *MockQuerier) CountLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error) {
+	args := m.Called(ctx, tenantID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockQuerier) CountBookingsByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error) {
+	args := m.Called(ctx, tenantID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockQuerier) CreateLease(ctx context.Context, arg postgres.CreateLeaseParams) (postgres.Lease, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.Lease), args.Error(1)
+}
+
+func (m *MockQuerier) UpdateLastContext(ctx context.Context, arg postgres.UpdateLastContextParams) error {
+	args := m.Called(ctx, arg)
+	return args.Error(0)
+}
+
 // MockTxManager handles transaction beginning
 type MockTxManager struct {
 	mock.Mock

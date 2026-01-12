@@ -1,0 +1,277 @@
+2026/01/12 22:17:01 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 27.1.1
+  API Version: 1.46
+  Operating System: Ubuntu 25.10
+  Total Memory: 64057 MB
+  Testcontainers for Go Version: v0.40.0
+  Resolved Docker Host: unix:///var/run/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: a518b0c512357bc3abc67551a06b9c5e642d6d3386e7f26e68542905d8958092
+  Test ProcessID: a72ad7c1-60e5-47cc-b7b3-5c9626e49040
+2026/01/12 22:17:01 🐳 Creating container for image postgres:15-alpine
+2026/01/12 22:17:01 🐳 Creating container for image testcontainers/ryuk:0.13.0
+2026/01/12 22:17:01 ✅ Container created: 49d6f0a099d9
+2026/01/12 22:17:01 🐳 Starting container: 49d6f0a099d9
+2026/01/12 22:17:01 ✅ Container started: 49d6f0a099d9
+2026/01/12 22:17:01 ⏳ Waiting for container id 49d6f0a099d9 image: testcontainers/ryuk:0.13.0. Waiting for: port 8080/tcp to be listening
+2026/01/12 22:17:01 Shell not executable in container, only external port validated
+2026/01/12 22:17:01 🔔 Container is ready: 49d6f0a099d9
+2026/01/12 22:17:01 ✅ Container created: 0627e9c38285
+2026/01/12 22:17:01 🐳 Starting container: 0627e9c38285
+2026/01/12 22:17:01 ✅ Container started: 0627e9c38285
+2026/01/12 22:17:01 ⏳ Waiting for container id 0627e9c38285 image: postgres:15-alpine. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2)]
+2026/01/12 22:17:02 🔔 Container is ready: 0627e9c38285
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] POST   /api/v1/auth/register     --> seculoc-back/internal/adapter/http/handler.(*UserHandler).Register-fm (3 handlers)
+[GIN-debug] POST   /api/v1/auth/login        --> seculoc-back/internal/adapter/http/handler.(*UserHandler).Login-fm (3 handlers)
+[GIN-debug] POST   /api/v1/auth/switch-context --> seculoc-back/internal/adapter/http/handler.(*UserHandler).SwitchContext-fm (4 handlers)
+[GIN-debug] POST   /api/v1/properties        --> seculoc-back/internal/adapter/http/handler.(*PropertyHandler).Create-fm (4 handlers)
+[GIN-debug] GET    /api/v1/properties        --> seculoc-back/internal/adapter/http/handler.(*PropertyHandler).List-fm (4 handlers)
+[GIN-debug] DELETE /api/v1/properties/:id    --> seculoc-back/internal/adapter/http/handler.(*PropertyHandler).Delete-fm (4 handlers)
+[GIN-debug] POST   /api/v1/subscriptions     --> seculoc-back/internal/adapter/http/handler.(*SubscriptionHandler).Subscribe-fm (4 handlers)
+[GIN-debug] POST   /api/v1/subscriptions/upgrade --> seculoc-back/internal/adapter/http/handler.(*SubscriptionHandler).IncreaseLimit-fm (4 handlers)
+[GIN-debug] POST   /api/v1/solvency/check    --> seculoc-back/internal/adapter/http/handler.(*SolvencyHandler).CreateCheck-fm (4 handlers)
+[GIN-debug] POST   /api/v1/solvency/credits  --> seculoc-back/internal/adapter/http/handler.(*SolvencyHandler).BuyCredits-fm (4 handlers)
+[GIN-debug] POST   /api/v1/invitations       --> seculoc-back/internal/adapter/http/handler.(*InvitationHandler).InviteTenant-fm (4 handlers)
+[GIN-debug] POST   /api/v1/invitations/accept --> seculoc-back/internal/adapter/http/handler.(*InvitationHandler).AcceptInvitation-fm (4 handlers)
+[GIN-debug] GET    /health                   --> seculoc-back/internal/app.NewServer.func1 (3 handlers)
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (3 handlers)
+=== RUN   TestE2E_ErrorCases
+2026-01-12T22:17:02.405+0100	[33mWARN[0m	handler/user.go:109	login failed: user not found or invalid	{"request_id": "d82a21f5-79a5-41fe-973c-5332f3a84c78", "email": "e2e_1768252622397841558@example.com"}
+seculoc-back/internal/adapter/http/handler.(*UserHandler).Login
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/handler/user.go:109
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:227
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.405+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	login failed	{"request_id": "d82a21f5-79a5-41fe-973c-5332f3a84c78", "email": "e2e_1768252622397841558@example.com", "error": "invalid credentials"}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:227
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.405+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	Client Error	{"request_id": "d82a21f5-79a5-41fe-973c-5332f3a84c78", "status": 401, "method": "POST", "path": "/api/v1/auth/login", "ip": "", "latency": 0.007197154, "user_agent": ""}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:227
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.405+0100	[34mINFO[0m	handler/user.go:50	user registered successfully	{"request_id": "cbda0572-ea79-4346-87b3-91efbdad6b44", "user_id": 1, "email": "e2e_1768252622397841558@example.com"}
+2026-01-12T22:17:02.405+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "cbda0572-ea79-4346-87b3-91efbdad6b44", "status": 201, "method": "POST", "path": "/api/v1/auth/register", "ip": "", "latency": 0.000412068, "user_agent": ""}
+2026-01-12T22:17:02.407+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "a64119e0-ec85-4727-9174-f89e1d56feb6", "status": 200, "method": "POST", "path": "/api/v1/auth/login", "ip": "", "latency": 0.001822566, "user_agent": ""}
+2026-01-12T22:17:02.407+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	Client Error	{"request_id": "8884e032-de4b-47f4-8e95-5807cc39558f", "status": 401, "method": "POST", "path": "/api/v1/properties", "ip": "", "latency": 0.000001166, "user_agent": ""}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:246
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.407+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	invalid subscription request	{"request_id": "9ed158b3-c6c7-469a-a3a8-3f9f5951f19b", "error": "Key: 'SubscribeRequest.Plan' Error:Field validation for 'Plan' failed on the 'oneof' tag\nKey: 'SubscribeRequest.Frequency' Error:Field validation for 'Frequency' failed on the 'required' tag"}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.AuthMiddleware.func3
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/auth.go:48
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:250
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.407+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	Client Error	{"request_id": "9ed158b3-c6c7-469a-a3a8-3f9f5951f19b", "status": 400, "method": "POST", "path": "/api/v1/subscriptions", "ip": "", "latency": 0.000043195, "user_agent": ""}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:250
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.407+0100	[34mINFO[0m	postgres/tx.go:39	subscription created	{"request_id": "ea2d8f1a-3a98-4c50-9704-4a44a2dd1fa1", "user_id": 1, "plan": "discovery", "amount": 0}
+2026-01-12T22:17:02.408+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "ea2d8f1a-3a98-4c50-9704-4a44a2dd1fa1", "status": 200, "method": "POST", "path": "/api/v1/subscriptions", "ip": "", "latency": 0.001038758, "user_agent": ""}
+2026-01-12T22:17:02.409+0100	[34mINFO[0m	handler/property.go:77	property created	{"request_id": "68a79f12-3947-4fd8-a38e-645f15525d06", "property_id": 1, "user_id": 1}
+2026-01-12T22:17:02.409+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "68a79f12-3947-4fd8-a38e-645f15525d06", "status": 201, "method": "POST", "path": "/api/v1/properties", "ip": "", "latency": 0.000818208, "user_agent": ""}
+    e2e_test.go:266: DEBUG PROPERTY RESPONSE: map[address:Seasonal Err created_at:2026-01-12T21:17:02.408568 details:e30= id:1 is_active:true owner_id:1 rental_type:seasonal vacancy_credits:20]
+2026-01-12T22:17:02.410+0100	[34mINFO[0m	postgres/tx.go:39	solvency check initiated	{"request_id": "d65fcc95-b733-414d-8ee0-62caa5b13290", "user_id": 1, "check_id": 1, "candidate": "broke@test.com", "credit_source": "property"}
+2026-01-12T22:17:02.410+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "d65fcc95-b733-414d-8ee0-62caa5b13290", "status": 201, "method": "POST", "path": "/api/v1/solvency/check", "ip": "", "latency": 0.00146652, "user_agent": ""}
+    e2e_test.go:294: 
+        	Error Trace:	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:294
+        	Error:      	Not equal: 
+        	            	expected: 400
+        	            	actual  : 201
+        	Test:       	TestE2E_ErrorCases
+    e2e_test.go:295: 
+        	Error Trace:	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:295
+        	Error:      	"{\"check_id\":1,\"status\":{\"solvency_status\":\"pending\",\"valid\":true}}" does not contain "insufficient credits"
+        	Test:       	TestE2E_ErrorCases
+2026-01-12T22:17:02.412+0100	[34mINFO[0m	postgres/tx.go:39	initial bonus granted	{"request_id": "db19bffb-2976-4bbe-85f1-a161726cfcd2", "user_id": 1}
+2026-01-12T22:17:02.412+0100	[34mINFO[0m	handler/property.go:77	property created	{"request_id": "db19bffb-2976-4bbe-85f1-a161726cfcd2", "property_id": 2, "user_id": 1}
+2026-01-12T22:17:02.412+0100	[34mINFO[0m	gin@v1.11.0/context.go:192	Request	{"request_id": "db19bffb-2976-4bbe-85f1-a161726cfcd2", "status": 201, "method": "POST", "path": "/api/v1/properties", "ip": "", "latency": 0.001815256, "user_agent": ""}
+2026-01-12T22:17:02.413+0100	[33mWARN[0m	postgres/tx.go:39	quota exceeded	{"request_id": "ca7c0573-ddf0-4f5b-a9df-877a1c95b716", "limit": 1, "current": 1}
+seculoc-back/internal/adapter/storage/postgres.(*TxManagerImpl).WithTx
+	/home/mchatti/perso/seculoc-back/internal/adapter/storage/postgres/tx.go:39
+seculoc-back/internal/core/service.(*PropertyService).CreateProperty
+	/home/mchatti/perso/seculoc-back/internal/core/service/property.go:32
+seculoc-back/internal/adapter/http/handler.(*PropertyHandler).Create
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/handler/property.go:77
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.AuthMiddleware.func3
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/auth.go:48
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:305
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.413+0100	[33mWARN[0m	handler/property.go:77	create property failed	{"request_id": "ca7c0573-ddf0-4f5b-a9df-877a1c95b716", "error": "property quota exceeded for current plan"}
+seculoc-back/internal/adapter/http/handler.(*PropertyHandler).Create
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/handler/property.go:77
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.AuthMiddleware.func3
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/auth.go:48
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:305
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.413+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	create property failed	{"request_id": "ca7c0573-ddf0-4f5b-a9df-877a1c95b716", "error": "property quota exceeded for current plan"}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.AuthMiddleware.func3
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/auth.go:48
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.CustomRecoveryWithWriter.func1
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/recovery.go:92
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+seculoc-back/internal/app.NewServer.RequestLogger.func2
+	/home/mchatti/perso/seculoc-back/internal/adapter/http/middleware/logger.go:44
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:305
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+2026-01-12T22:17:02.413+0100	[33mWARN[0m	gin@v1.11.0/context.go:192	Client Error	{"request_id": "ca7c0573-ddf0-4f5b-a9df-877a1c95b716", "status": 400, "method": "POST", "path": "/api/v1/properties", "ip": "", "latency": 0.000451068, "user_agent": ""}
+github.com/gin-gonic/gin.(*Context).Next
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/context.go:192
+github.com/gin-gonic/gin.(*Engine).handleHTTPRequest
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:689
+github.com/gin-gonic/gin.(*Engine).ServeHTTP
+	/home/mchatti/go/pkg/mod/github.com/gin-gonic/gin@v1.11.0/gin.go:643
+command-line-arguments.performRequest
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:106
+command-line-arguments.TestE2E_ErrorCases
+	/home/mchatti/perso/seculoc-back/test/e2e/e2e_test.go:305
+testing.tRunner
+	/usr/lib/go-1.24/src/testing/testing.go:1792
+--- FAIL: TestE2E_ErrorCases (0.02s)
+FAIL
+2026/01/12 22:17:02 🐳 Stopping container: 0627e9c38285
+2026/01/12 22:17:02 ✅ Container stopped: 0627e9c38285
+2026/01/12 22:17:02 🐳 Terminating container: 0627e9c38285
+2026/01/12 22:17:02 🚫 Container terminated: 0627e9c38285
+FAIL	command-line-arguments	1.382s
+FAIL

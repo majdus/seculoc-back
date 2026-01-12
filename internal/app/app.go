@@ -33,8 +33,9 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 	// 3. Adapters (Handlers)
 	userHandler := handler.NewUserHandler(userService)
 	propHandler := handler.NewPropertyHandler(propService)
-	subHandler := handler.NewSubscriptionHandler(subService)
+	subHandler := handler.NewSubscriptionHandler(subService, userService)
 	solvHandler := handler.NewSolvencyHandler(solvService)
+	invHandler := handler.NewInvitationHandler(userService)
 
 	// 4. HTTP Router (Gin)
 	if viper.GetString("GIN_MODE") == "release" {
@@ -56,9 +57,10 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 		}
 
 		// Protected Routes
-		protected := api.Group("/")
+		protected := api.Group("")
 		protected.Use(middleware.AuthMiddleware())
 		{
+			protected.POST("/auth/switch-context", userHandler.SwitchContext)
 			// Properties
 			protected.POST("/properties", propHandler.Create)
 			protected.GET("/properties", propHandler.List)
@@ -71,6 +73,10 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 			// Solvency
 			protected.POST("/solvency/check", solvHandler.CreateCheck)
 			protected.POST("/solvency/credits", solvHandler.BuyCredits)
+
+			// Invitations
+			protected.POST("/invitations", invHandler.InviteTenant)
+			protected.POST("/invitations/accept", invHandler.AcceptInvitation)
 		}
 	}
 

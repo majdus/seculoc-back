@@ -1,5 +1,22 @@
 basePath: /api/v1
 definitions:
+  handler.AcceptInvitationRequest:
+    properties:
+      token:
+        type: string
+    required:
+    - token
+    type: object
+  handler.InviteTenantRequest:
+    properties:
+      email:
+        type: string
+      property_id:
+        type: integer
+    required:
+    - email
+    - property_id
+    type: object
   handler.LoginRequest:
     properties:
       email:
@@ -10,25 +27,152 @@ definitions:
     - email
     - password
     type: object
+  handler.LoginResponse:
+    properties:
+      capabilities:
+        $ref: '#/definitions/service.Capabilities'
+      current_context:
+        $ref: '#/definitions/service.UserContext'
+      token:
+        type: string
+      user:
+        properties:
+          email:
+            type: string
+          first_name:
+            type: string
+          id:
+            type: integer
+          is_verified:
+            type: boolean
+          last_name:
+            type: string
+          owner_profile:
+            $ref: '#/definitions/service.UserProfile'
+          phone:
+            type: string
+          stripe_customer_id:
+            type: string
+        type: object
+    type: object
+  handler.PropertyResponse:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      owner_id:
+        type: integer
+      rental_type:
+        type: string
+      vacancy_credits:
+        type: integer
+    type: object
   handler.RegisterRequest:
     properties:
       email:
         type: string
       first_name:
         type: string
+      invite_token:
+        description: Optional
+        type: string
       last_name:
         type: string
       password:
         minLength: 8
         type: string
-      phone_number:
+      phone:
         type: string
     required:
     - email
     - first_name
     - last_name
     - password
-    - phone_number
+    - phone
+    type: object
+  handler.SubscriptionResponse:
+    properties:
+      data:
+        properties:
+          user:
+            properties:
+              email:
+                type: string
+              first_name:
+                type: string
+              id:
+                type: integer
+              is_verified:
+                type: boolean
+              last_name:
+                type: string
+              owner_profile:
+                $ref: '#/definitions/service.UserProfile'
+              phone:
+                type: string
+              stripe_customer_id:
+                type: string
+            type: object
+        type: object
+      status:
+        type: string
+    type: object
+  handler.SwitchContextRequest:
+    properties:
+      target_context:
+        enum:
+        - owner
+        - tenant
+        type: string
+    required:
+    - target_context
+    type: object
+  service.Capabilities:
+    properties:
+      can_act_as_owner:
+        type: boolean
+      can_act_as_tenant:
+        type: boolean
+    type: object
+  service.SubscriptionDTO:
+    properties:
+      end_date:
+        type: string
+      frequency:
+        type: string
+      max_properties_limit:
+        type: integer
+      plan_type:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: string
+    type: object
+  service.UserContext:
+    enum:
+    - owner
+    - tenant
+    - none
+    type: string
+    x-enum-varnames:
+    - ContextOwner
+    - ContextTenant
+    - ContextNone
+  service.UserProfile:
+    properties:
+      credit_balance:
+        type: integer
+      subscription:
+        $ref: '#/definitions/service.SubscriptionDTO'
     type: object
 host: localhost:8080
 info:
@@ -48,6 +192,7 @@ paths:
     post:
       consumes:
       - application/json
+      - application/json
       description: Authenticate user and return JWT token
       parameters:
       - description: Login Credentials
@@ -62,9 +207,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handler.LoginResponse'
         "400":
           description: Bad Request
           schema:
@@ -109,6 +252,96 @@ paths:
       summary: Register a new user
       tags:
       - auth
+  /auth/switch-context:
+    post:
+      consumes:
+      - application/json
+      description: Switch between owner and tenant context
+      parameters:
+      - description: Context Info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.SwitchContextRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Switch user context
+      tags:
+      - auth
+  /invitations:
+    post:
+      consumes:
+      - application/json
+      description: Send an invitation to a tenant
+      parameters:
+      - description: Invitation Info
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.InviteTenantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Invite a tenant
+      tags:
+      - invitations
+  /invitations/accept:
+    post:
+      consumes:
+      - application/json
+      description: Accept a tenant invitation
+      parameters:
+      - description: Token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.AcceptInvitationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Accept an invitation
+      tags:
+      - invitations
   /properties:
     get:
       consumes:
@@ -147,8 +380,7 @@ paths:
         "201":
           description: Created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/handler.PropertyResponse'
         "400":
           description: Bad Request
           schema:
@@ -164,6 +396,39 @@ paths:
       security:
       - BearerAuth: []
       summary: Create a new property
+      tags:
+      - properties
+  /properties/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a property belonging to the authenticated user
+      parameters:
+      - description: Property ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a property
       tags:
       - properties
   /solvency/check:
@@ -246,11 +511,10 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
+        "200":
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/handler.SubscriptionResponse'
         "400":
           description: Bad Request
           schema:

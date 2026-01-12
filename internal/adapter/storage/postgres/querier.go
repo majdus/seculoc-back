@@ -11,13 +11,19 @@ import (
 )
 
 type Querier interface {
+	CountBookingsByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error)
+	CountLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error)
 	CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error)
 	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CreateCreditTransaction(ctx context.Context, arg CreateCreditTransactionParams) (CreditTransaction, error)
+	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (LeaseInvitation, error)
+	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DecreasePropertyCredits(ctx context.Context, id int32) error
+	GetInvitationByToken(ctx context.Context, token string) (LeaseInvitation, error)
 	GetProperty(ctx context.Context, id int32) (Property, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserById(ctx context.Context, id int32) (User, error)
@@ -26,6 +32,8 @@ type Querier interface {
 	HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error)
 	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
 	SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error)
+	UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error
+	UpdateLastContext(ctx context.Context, arg UpdateLastContextParams) error
 	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error
 }
 

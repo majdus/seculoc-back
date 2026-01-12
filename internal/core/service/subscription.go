@@ -76,20 +76,6 @@ func (s *SubscriptionService) SubscribeUser(ctx context.Context, userID int32, p
 			return fmt.Errorf("failed to create subscription: %w", err)
 		}
 
-		// 2. Create Initial Credit Transaction (e.g., if plan gives credits)
-		// Ignoring logic for free credits for now, just creating a transaction record
-		if amount > 0 {
-			_, err = q.CreateCreditTransaction(ctx, postgres.CreateCreditTransactionParams{
-				UserID:          pgtype.Int4{Int32: userID, Valid: true},
-				Amount:          amount,
-				TransactionType: "plan_purchase",
-				Description:     pgtype.Text{String: fmt.Sprintf("Purchase of %s plan", plan), Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create transaction: %w", err)
-			}
-		}
-
 		log.Info("subscription created",
 			zap.Int("user_id", int(userID)),
 			zap.String("plan", plan),

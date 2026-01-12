@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestE2E_DeleteProperty(t *testing.T) {
-	email := getEmail()
-
-	// 1. Register
-	w := performRequest(router, "POST", "/api/v1/auth/register", "", map[string]string{
-		"email": email, "password": "password123", "first_name": "Del", "last_name": "User", "phone_number": "999",
-	})
+	// 1. Register User
+	email := "e2e_" + fmt.Sprintf("%d", time.Now().UnixNano()) + "@example.com"
+	payload := map[string]interface{}{
+		"email":      email,
+		"password":   "password123",
+		"first_name": "John",
+		"last_name":  "Doe",
+		"phone":      "1234567890",
+	}
+	w := performRequest(router, "POST", "/api/v1/auth/register", "", payload)
 	require.Equal(t, http.StatusCreated, w.Code)
 
 	// 2. Login
@@ -29,11 +34,11 @@ func TestE2E_DeleteProperty(t *testing.T) {
 	token := loginResp["token"]
 	require.NotEmpty(t, token)
 
-	// 3. Subscribe (required for limits, though seasonal is open)
+	// 3. Subscribe (required to create property)
 	w = performRequest(router, "POST", "/api/v1/subscriptions", token, map[string]string{
 		"plan": "discovery", "frequency": "monthly",
 	})
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// 4. Create Property
 	w = performRequest(router, "POST", "/api/v1/properties", token, map[string]interface{}{

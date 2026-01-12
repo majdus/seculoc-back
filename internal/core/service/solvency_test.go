@@ -13,7 +13,7 @@ import (
 	"seculoc-back/internal/adapter/storage/postgres"
 )
 
-func TestCreateSolvencyCheck_Success(t *testing.T) {
+func TestCreateSolvencyCheck_PropertyCredits(t *testing.T) {
 	mockTx := new(MockTxManager)
 	mockQuerier := new(MockQuerier)
 	svc := NewSolvencyService(mockTx, zap.NewNop())
@@ -22,43 +22,77 @@ func TestCreateSolvencyCheck_Success(t *testing.T) {
 	propID := int32(10)
 	email := "candidate@example.com"
 
-	// Mock 1: Get Balance (Must be > 0)
-	mockQuerier.On("GetUserCreditBalance", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int32(5), nil)
-
-	// Mock 2: Get Property (Ownership Check)
-	ownedProp := postgres.Property{
-		ID:      propID,
-		OwnerID: pgtype.Int4{Int32: userID, Valid: true},
-	}
-	mockQuerier.On("GetProperty", mock.Anything, propID).Return(ownedProp, nil)
-
-	// Mock 3: Create Debit Transaction (-1)
-	mockQuerier.On("CreateCreditTransaction", mock.Anything, mock.MatchedBy(func(arg postgres.CreateCreditTransactionParams) bool {
-		return arg.UserID.Int32 == userID && arg.Amount == -1 && arg.TransactionType == "check_usage"
-	})).Return(postgres.CreditTransaction{}, nil)
-
-	// Mock 4: Create Solvency Check
-	expectedCheck := postgres.SolvencyCheck{
-		ID:               100,
-		InitiatorOwnerID: pgtype.Int4{Int32: userID, Valid: true},
-		Status:           postgres.NullSolvencyStatus{SolvencyStatus: postgres.SolvencyStatusPending, Valid: true},
-	}
-	mockQuerier.On("CreateSolvencyCheck", mock.Anything, mock.MatchedBy(func(arg postgres.CreateSolvencyCheckParams) bool {
-		return arg.InitiatorOwnerID.Int32 == userID && arg.CandidateEmail == email && arg.PropertyID.Int32 == propID
-	})).Return(expectedCheck, nil)
-
 	// Mock Tx
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
+
+		// 1. Get Property (Vacancy > 0)
+		ownedProp := postgres.Property{
+			ID:             propID,
+			OwnerID:        pgtype.Int4{Int32: userID, Valid: true},
+			VacancyCredits: 20,
+		}
+		mockQuerier.On("GetProperty", mock.Anything, propID).Return(ownedProp, nil)
+
+		// 2. Decrease Property Credits
+		mockQuerier.On("DecreasePropertyCredits", mock.Anything, propID).Return(nil)
+
+		// 3. Create Solvency Check
+		expectedCheck := postgres.SolvencyCheck{
+			ID:               100,
+			InitiatorOwnerID: pgtype.Int4{Int32: userID, Valid: true},
+			Status:           postgres.NullSolvencyStatus{SolvencyStatus: postgres.SolvencyStatusPending, Valid: true},
+		}
+		mockQuerier.On("CreateSolvencyCheck", mock.Anything, mock.MatchedBy(func(arg postgres.CreateSolvencyCheckParams) bool {
+			return arg.InitiatorOwnerID.Int32 == userID && arg.CandidateEmail == email && arg.PropertyID.Int32 == propID
+		})).Return(expectedCheck, nil)
+
 		_ = fn(mockQuerier)
 	})
 
-	// Execute
 	check, err := svc.RetrieveCheck(ctx, userID, email, propID)
-
-	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, int32(100), check.ID)
+}
+
+func TestCreateSolvencyCheck_GlobalCredits(t *testing.T) {
+	mockTx := new(MockTxManager)
+	mockQuerier := new(MockQuerier)
+	svc := NewSolvencyService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+	propID := int32(10)
+	email := "candidate@example.com"
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+
+		// 1. Get Property (Vacancy = 0)
+		ownedProp := postgres.Property{
+			ID:             propID,
+			OwnerID:        pgtype.Int4{Int32: userID, Valid: true},
+			VacancyCredits: 0,
+		}
+		mockQuerier.On("GetProperty", mock.Anything, propID).Return(ownedProp, nil)
+
+		// 2. Get Global Balance (> 0)
+		mockQuerier.On("GetUserCreditBalance", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int32(5), nil)
+
+		// 3. Create Debit Transaction (-1)
+		mockQuerier.On("CreateCreditTransaction", mock.Anything, mock.MatchedBy(func(arg postgres.CreateCreditTransactionParams) bool {
+			return arg.UserID.Int32 == userID && arg.Amount == -1 && arg.TransactionType == "check_usage"
+		})).Return(postgres.CreditTransaction{}, nil)
+
+		// 4. Create Solvency Check
+		expectedCheck := postgres.SolvencyCheck{ID: 101}
+		mockQuerier.On("CreateSolvencyCheck", mock.Anything, mock.Anything).Return(expectedCheck, nil)
+
+		_ = fn(mockQuerier)
+	})
+
+	check, err := svc.RetrieveCheck(ctx, userID, email, propID)
+	assert.NoError(t, err)
+	assert.Equal(t, int32(101), check.ID)
 }
 
 func TestCreateSolvencyCheck_NotOwner(t *testing.T) {
@@ -104,12 +138,19 @@ func TestCreateSolvencyCheck_InsufficientCredits(t *testing.T) {
 	// Note: WithTx wrappers usually handle the error return.
 	// Logic inside Tx: check balance. If 0, return error.
 
-	// We expect the TX logic to execute.
+	// Mock Tx
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("insufficient credits")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
 
-		// Mocking the inner behaviour manually because we are mocking WithTx
-		// The service will call GetUserCreditBalance inside.
+		// 1. Get Property (Vacancy = 0)
+		prop := postgres.Property{
+			ID:             1,
+			OwnerID:        pgtype.Int4{Int32: userID, Valid: true},
+			VacancyCredits: 0,
+		}
+		mockQuerier.On("GetProperty", mock.Anything, int32(1)).Return(prop, nil)
+
+		// 2. Get Global Balance (0)
 		mockQuerier.On("GetUserCreditBalance", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int32(0), nil)
 
 		_ = fn(mockQuerier)

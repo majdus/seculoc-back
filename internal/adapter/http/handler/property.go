@@ -27,6 +27,18 @@ type CreatePropertyRequest struct {
 	Details    map[string]interface{} `json:"details" binding:"required"`
 }
 
+// PropertyResponse represents the property object returned in API
+type PropertyResponse struct {
+	ID             int32                  `json:"id"`
+	OwnerID        int32                  `json:"owner_id"`
+	Address        string                 `json:"address"`
+	RentalType     string                 `json:"rental_type"`
+	Details        map[string]interface{} `json:"details"`
+	VacancyCredits int32                  `json:"vacancy_credits"`
+	IsActive       bool                   `json:"is_active"`
+	CreatedAt      string                 `json:"created_at"`
+}
+
 // Create godoc
 // @Summary      Create a new property
 // @Description  Create a property listing (Long Term or Seasonal)
@@ -35,7 +47,7 @@ type CreatePropertyRequest struct {
 // @Produce      json
 // @Security     BearerAuth
 // @Param        request body map[string]interface{} true "Property Info"
-// @Success      201  {object}  map[string]interface{}
+// @Success      201  {object}  PropertyResponse
 // @Failure      400  {object}  map[string]string
 // @Failure      403  {object}  map[string]string
 // @Router       /properties [post]
@@ -70,7 +82,7 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"property_id": prop.ID})
+	c.JSON(http.StatusCreated, prop)
 }
 
 // List godoc

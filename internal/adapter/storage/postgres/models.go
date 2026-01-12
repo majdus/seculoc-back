@@ -291,14 +291,26 @@ type Lease struct {
 	CreatedAt           pgtype.Timestamp `json:"created_at"`
 }
 
+type LeaseInvitation struct {
+	ID          int32            `json:"id"`
+	PropertyID  int32            `json:"property_id"`
+	OwnerID     int32            `json:"owner_id"`
+	TenantEmail string           `json:"tenant_email"`
+	Token       string           `json:"token"`
+	Status      pgtype.Text      `json:"status"`
+	ExpiresAt   pgtype.Timestamp `json:"expires_at"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+}
+
 type Property struct {
-	ID         int32            `json:"id"`
-	OwnerID    pgtype.Int4      `json:"owner_id"`
-	Address    string           `json:"address"`
-	RentalType PropertyType     `json:"rental_type"`
-	Details    []byte           `json:"details"`
-	IsActive   pgtype.Bool      `json:"is_active"`
-	CreatedAt  pgtype.Timestamp `json:"created_at"`
+	ID             int32            `json:"id"`
+	OwnerID        pgtype.Int4      `json:"owner_id"`
+	Address        string           `json:"address"`
+	RentalType     PropertyType     `json:"rental_type"`
+	Details        []byte           `json:"details"`
+	VacancyCredits int32            `json:"vacancy_credits"`
+	IsActive       pgtype.Bool      `json:"is_active"`
+	CreatedAt      pgtype.Timestamp `json:"created_at"`
 }
 
 type RentPayment struct {
@@ -373,6 +385,7 @@ type User struct {
 	PhoneNumber      pgtype.Text      `json:"phone_number"`
 	IsVerified       pgtype.Bool      `json:"is_verified"`
 	StripeCustomerID pgtype.Text      `json:"stripe_customer_id"`
+	LastContextUsed  pgtype.Text      `json:"last_context_used"`
 	CreatedAt        pgtype.Timestamp `json:"created_at"`
 }
 

@@ -61,6 +61,12 @@ L'API expose les ressources suivantes sur `/api/v1`.
 
 - `POST /api/v1/auth/register` : Inscription d'un nouvel utilisateur.
 - `POST /api/v1/auth/login` : Connexion (Retourne un JWT).
+- `POST /api/v1/auth/switch-context` : Changer de contexte (Owner <-> Tenant).
+
+### Invitations (Protégé par JWT)
+
+- `POST /api/v1/invitations` : Inviter un locataire.
+- `POST /api/v1/invitations/accept` : Accepter une invitation.
 
 ### Properties (Protégé par JWT)
 

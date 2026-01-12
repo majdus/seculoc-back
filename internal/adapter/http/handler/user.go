@@ -24,7 +24,8 @@ type RegisterRequest struct {
 	Password    string `json:"password" binding:"required,min=8"`
 	FirstName   string `json:"first_name" binding:"required"`
 	LastName    string `json:"last_name" binding:"required"`
-	PhoneNumber string `json:"phone_number" binding:"required"`
+	Phone       string `json:"phone" binding:"required"`
+	InviteToken string `json:"invite_token"` // Optional
 }
 
 // Register godoc
@@ -46,7 +47,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.svc.Register(c.Request.Context(), req.Email, req.Password, req.FirstName, req.LastName, req.PhoneNumber)
+	user, err := h.svc.Register(c.Request.Context(), req.Email, req.Password, req.FirstName, req.LastName, req.Phone, req.InviteToken)
 	if err != nil {
 		// Distinguish errors (conflict vs internal)
 		// For simplicity, returning 500 or 400 based on message usually,
@@ -56,6 +57,28 @@ func (h *UserHandler) Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"user_id": user.ID, "email": user.Email})
+}
+
+// SafeUser defines the public user fields
+type SafeUser struct {
+	ID          int32  `json:"id"`
+	Email       string `json:"email"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	Phone       string `json:"phone"`
+	IsVerified  bool   `json:"is_verified"`
+	StripeCusID string `json:"stripe_customer_id,omitempty"`
+}
+
+// LoginResponse defines the structure of the login response
+type LoginResponse struct {
+	Token          string               `json:"token"`
+	CurrentContext service.UserContext  `json:"current_context"`
+	Capabilities   service.Capabilities `json:"capabilities"`
+	User           struct {
+		SafeUser
+		OwnerProfile service.UserProfile `json:"owner_profile"`
+	} `json:"user"`
 }
 
 type LoginRequest struct {
@@ -68,9 +91,10 @@ type LoginRequest struct {
 // @Description  Authenticate user and return JWT token
 // @Tags         auth
 // @Accept       json
+// @Accept       json
 // @Produce      json
 // @Param        request body LoginRequest true "Login Credentials"
-// @Success      200  {object}  map[string]string
+// @Success      200  {object}  LoginResponse
 // @Failure      400  {object}  map[string]string
 // @Failure      401  {object}  map[string]string
 // @Router       /auth/login [post]
@@ -82,7 +106,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.svc.Login(c.Request.Context(), req.Email, req.Password)
+	authResp, err := h.svc.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		// Invalid credentials usually
 		log.Warn("login failed", zap.String("email", req.Email), zap.Error(err))
@@ -90,13 +114,74 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Generate JWT
-	token, err := auth.GenerateToken(user.ID, user.Email)
+	// Generate Token
+	token, err := auth.GenerateToken(authResp.User.ID, authResp.User.Email)
 	if err != nil {
 		log.Error("failed to generate token", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "login failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	// Construct SafeUser
+	safeUser := SafeUser{
+		ID:         authResp.User.ID,
+		Email:      authResp.User.Email,
+		FirstName:  authResp.User.FirstName.String,
+		LastName:   authResp.User.LastName.String,
+		Phone:      authResp.User.PhoneNumber.String,
+		IsVerified: authResp.User.IsVerified.Bool,
+	}
+	if authResp.User.StripeCustomerID.Valid {
+		safeUser.StripeCusID = authResp.User.StripeCustomerID.String
+	}
+
+	response := LoginResponse{
+		Token:          token,
+		CurrentContext: authResp.CurrentContext,
+		Capabilities:   authResp.Capabilities,
+	}
+	response.User.SafeUser = safeUser
+	response.User.OwnerProfile = authResp.Profile
+
+	c.JSON(http.StatusOK, response)
+}
+
+type SwitchContextRequest struct {
+	TargetContext string `json:"target_context" binding:"required,oneof=owner tenant"`
+}
+
+// SwitchContext godoc
+// @Summary      Switch user context
+// @Description  Switch between owner and tenant context
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body SwitchContextRequest true "Context Info"
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
+// @Router       /auth/switch-context [post]
+func (h *UserHandler) SwitchContext(c *gin.Context) {
+	log := logger.FromContext(c.Request.Context())
+
+	// Get User ID from context
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req SwitchContextRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := h.svc.SwitchContext(c.Request.Context(), userID.(int32), req.TargetContext)
+	if err != nil {
+		log.Error("failed to switch context", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to switch context"})
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
