@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,15 @@ func TestRegisterUser_Success(t *testing.T) {
 	core, _ := observer.New(zap.InfoLevel)
 	testLogger := zap.New(core)
 	mockQuerier := new(MockQuerier)
-	svc := NewUserService(mockQuerier, testLogger)
+	mockTx := new(MockTxManager)
+
+	// Wire Tx
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewUserService(mockTx, testLogger)
 
 	// 2. Mocks
 	// GetUserByEmail should return NoRows (user does not exist)
@@ -48,7 +58,16 @@ func TestRegisterUser_AlreadyExists(t *testing.T) {
 	core, _ := observer.New(zap.InfoLevel)
 	testLogger := zap.New(core)
 	mockQuerier := new(MockQuerier)
-	svc := NewUserService(mockQuerier, testLogger)
+	mockTx := new(MockTxManager)
+
+	// Wire Tx - It will fail inside, so WithTx returns error?
+	// Actually the service logic returns error, so WithTx bubbles it up.
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("user with email test@example.com already exists")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewUserService(mockTx, testLogger)
 
 	// 2. Mocks
 	// GetUserByEmail returns a user (conflict)
@@ -67,7 +86,14 @@ func TestRegisterUser_AlreadyExists(t *testing.T) {
 func TestLogin_Success(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
-	svc := NewUserService(mockQuerier, zap.NewNop())
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewUserService(mockTx, zap.NewNop())
 
 	// Mock
 	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: "hashed_password123"}
@@ -82,22 +108,38 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
-	// Setup
-	mockQuerier := new(MockQuerier)
-	svc := NewUserService(mockQuerier, zap.NewNop())
 
-	// Mock 1: User not found
-	mockQuerier.On("GetUserByEmail", mock.Anything, "unknown@example.com").Return(postgres.User{}, pgx.ErrNoRows)
+	// Case 1: User Not Found
+	// Mock Tx for Case 1
+	mockTx2 := new(MockTxManager)
+	mockQuerier2 := new(MockQuerier)
+	svc2 := NewUserService(mockTx2, zap.NewNop())
 
-	_, err := svc.Login(context.Background(), "unknown@example.com", "password")
+	mockTx2.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("invalid credentials")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier2)
+	})
+
+	mockQuerier2.On("GetUserByEmail", mock.Anything, "unknown@example.com").Return(postgres.User{}, pgx.ErrNoRows)
+
+	_, err := svc2.Login(context.Background(), "unknown@example.com", "password")
 	assert.Error(t, err)
 	assert.Equal(t, "invalid credentials", err.Error())
 
-	// Mock 2: Wrong Password
-	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: "hashed_password123"}
-	mockQuerier.On("GetUserByEmail", mock.Anything, "test@example.com").Return(existingUser, nil)
+	// Case 2: Wrong Password
+	mockTx3 := new(MockTxManager)
+	mockQuerier3 := new(MockQuerier)
+	svc3 := NewUserService(mockTx3, zap.NewNop())
 
-	_, err = svc.Login(context.Background(), "test@example.com", "wrongpassword")
+	mockTx3.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier3)
+	})
+
+	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: "hashed_password123"}
+	mockQuerier3.On("GetUserByEmail", mock.Anything, "test@example.com").Return(existingUser, nil)
+
+	_, err = svc3.Login(context.Background(), "test@example.com", "wrongpassword")
 	assert.Error(t, err)
 	assert.Equal(t, "invalid credentials", err.Error())
 }

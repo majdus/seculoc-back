@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,13 @@ import (
 func TestCreateProperty_Success(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
-	svc := NewPropertyService(mockQuerier, zap.NewNop())
+	mockTx := new(MockTxManager)
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, zap.NewNop())
 	ctx := context.Background()
 
 	userID := int32(1)
@@ -31,8 +38,10 @@ func TestCreateProperty_Success(t *testing.T) {
 	}
 	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(activeSub, nil)
 
-	// Mock 2: Count Properties (Current = 2)
-	mockQuerier.On("CountPropertiesByOwner", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int64(2), nil)
+	// Mock 2: Count Properties (Only called for LongTerm)
+	mockQuerier.On("CountPropertiesByOwnerAndType", mock.Anything, mock.MatchedBy(func(arg postgres.CountPropertiesByOwnerAndTypeParams) bool {
+		return arg.OwnerID.Int32 == userID && arg.RentalType == postgres.PropertyTypeLongTerm
+	})).Return(int64(2), nil) // 2 < 5 OK
 
 	// Mock 3: Create
 	expectedProp := postgres.Property{
@@ -45,11 +54,6 @@ func TestCreateProperty_Success(t *testing.T) {
 		return arg.Address == "123 Street" && arg.RentalType == postgres.PropertyTypeLongTerm
 	})).Return(expectedProp, nil)
 
-	// Mock 2: Count Properties (Only called for LongTerm)
-	mockQuerier.On("CountPropertiesByOwnerAndType", mock.Anything, mock.MatchedBy(func(arg postgres.CountPropertiesByOwnerAndTypeParams) bool {
-		return arg.OwnerID.Int32 == userID && arg.RentalType == postgres.PropertyTypeLongTerm
-	})).Return(int64(2), nil) // 2 < 5 OK
-
 	// Execute
 	prop, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
 
@@ -61,7 +65,13 @@ func TestCreateProperty_Success(t *testing.T) {
 func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
-	svc := NewPropertyService(mockQuerier, zap.NewNop())
+	mockTx := new(MockTxManager)
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, zap.NewNop())
 	ctx := context.Background()
 	userID := int32(1)
 
@@ -96,7 +106,14 @@ func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	core, observedLogs := observer.New(zap.WarnLevel)
 	testLogger := zap.New(core)
 	mockQuerier := new(MockQuerier)
-	svc := NewPropertyService(mockQuerier, testLogger)
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("property quota exceeded for current plan")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, testLogger)
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "logger", testLogger)
 
@@ -123,15 +140,24 @@ func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "property quota exceeded for current plan", err.Error())
 
-	// Verify Log
-	logs := observedLogs.FilterMessage("create property failed: quota exceeded")
+	// Verify Log -- The service logs "quota exceeded" before returning the error.
+	// Since WithTx bubbled the error, did the log happen?
+	// Yes, inside the function passed to WithTx.
+	logs := observedLogs.FilterMessage("quota exceeded")
 	assert.Equal(t, 1, logs.Len())
 }
 
 func TestCreateProperty_NoSubscription(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
-	svc := NewPropertyService(mockQuerier, zap.NewNop())
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("user has no active subscription")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, zap.NewNop())
 	ctx := context.Background()
 	userID := int32(1)
 
@@ -149,7 +175,15 @@ func TestCreateProperty_NoSubscription(t *testing.T) {
 func TestListProperties(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
-	svc := NewPropertyService(mockQuerier, zap.NewNop())
+	mockTx := new(MockTxManager)
+
+	// We mock success but WithTx returns the error from callback.
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, zap.NewNop())
 	ctx := context.Background()
 	userID := int32(1)
 

@@ -2,112 +2,141 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
+	"seculoc-back/internal/adapter/http/handler"
 	"seculoc-back/internal/adapter/http/middleware"
+	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/core/service"
 	"seculoc-back/internal/platform/logger"
 )
 
 func main() {
-	// 1. Load Config (Viper)
-	viper.SetConfigFile(".env")
-	viper.AutomaticEnv()
-	if err := viper.ReadInConfig(); err != nil {
-		// Log but continue (config might be provided via ENV vars in production/docker)
-		// We can't use the configured logger yet, so use standard log or panic if critical
-		// But let's initialize logger first with a default
-	}
+	// 1. Initialize Configuration
+	initConfig()
 
 	// 2. Initialize Logger
-	logger.Init(viper.GetString("LOG_LEVEL"))
+	logger.Init(viper.GetString("ENV"))
 	log := logger.Get()
 	defer logger.Sync()
+	// Zap global is set inside Init/Get usually, but we can ensure it.
+	// Actually the logger package handles it.
 
-	log.Info("Starting Séculoc Backend...")
+	log.Info("Starting Seculoc Backend...")
 
 	// 3. Database Connection
-	dbHost := viper.GetString("DB_HOST")
-	dbPort := viper.GetString("DB_PORT")
-	dbUser := viper.GetString("DB_USER")
-	dbPass := viper.GetString("DB_PASSWORD")
-	dbName := viper.GetString("DB_NAME")
-	dbSSL := viper.GetString("DB_SSL_MODE")
+	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		viper.GetString("DB_USER"),
+		viper.GetString("DB_PASSWORD"),
+		viper.GetString("DB_HOST"),
+		viper.GetString("DB_PORT"),
+		viper.GetString("DB_NAME"),
+		viper.GetString("DB_SSL_MODE"),
+	)
 
-	dbURL := "postgres://" + dbUser + ":" + dbPass + "@" + dbHost + ":" + dbPort + "/" + dbName + "?sslmode=" + dbSSL
-
-	ctx := context.Background()
-	poolConfig, err := pgxpool.ParseConfig(dbURL)
+	config, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
-		log.Fatal("Unable to parse database URL", zap.Error(err))
+		log.Fatal("Unable to parse database config", zap.Error(err))
 	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		log.Fatal("Unable to connect to database", zap.Error(err))
 	}
 	defer pool.Close()
 
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatal("Database ping failed", zap.Error(err))
+	if err := pool.Ping(context.Background()); err != nil {
+		log.Fatal("Failed to ping database", zap.Error(err))
 	}
-	log.Info("Connected to PostgreSQL")
+	log.Info("Database connected successfully")
 
-	// 3. Setup HTTP Server (Gin)
+	// 4. Persistence Layer
+	txManager := postgres.NewTxManager(pool)
+
+	// 5. Service Layer
+	userService := service.NewUserService(txManager, log)
+	propService := service.NewPropertyService(txManager, log)
+	subService := service.NewSubscriptionService(txManager, log)
+	solvService := service.NewSolvencyService(txManager, log)
+
+	// 6. Adapters (Handlers)
+	userHandler := handler.NewUserHandler(userService)
+	propHandler := handler.NewPropertyHandler(propService)
+	subHandler := handler.NewSubscriptionHandler(subService)
+	solvHandler := handler.NewSolvencyHandler(solvService)
+
+	// 7. HTTP Router (Gin)
+	if viper.GetString("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.New()
 
 	// Middleware
-	r.Use(gin.Recovery()) // Recovery middleware recovers from any panics and writes a 500 if there was one.
 	r.Use(middleware.RequestLogger())
+	r.Use(gin.Recovery())
 
-	// Routes
+	// Public Routes
+	api := r.Group("/api/v1")
+	{
+		authGroup := api.Group("/auth")
+		{
+			authGroup.POST("/register", userHandler.Register)
+			authGroup.POST("/login", userHandler.Login)
+		}
+
+		// Protected Routes
+		protected := api.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			// Properties
+			protected.POST("/properties", propHandler.Create)
+			protected.GET("/properties", propHandler.List)
+
+			// Subscriptions
+			protected.POST("/subscriptions", subHandler.Subscribe)
+			protected.POST("/subscriptions/upgrade", subHandler.IncreaseLimit)
+
+			// Solvency
+			protected.POST("/solvency/check", solvHandler.CreateCheck)
+		}
+	}
+
+	// Health Check
 	r.GET("/health", func(c *gin.Context) {
-		// Example of using the injected logger (optional, as middleware logs requests)
-		// l := middleware.GetLogger(c.Request.Context())
-		// l.Debug("Health check called")
-		c.JSON(http.StatusOK, gin.H{
-			"status": "up",
-			"db":     "connected",
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// 4. Start Server with Graceful Shutdown
+	// 8. Start Server
 	addr := viper.GetString("SERVER_ADDRESS")
 	if addr == "" {
 		addr = ":8080"
 	}
+
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: r,
 	}
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("Listen and serve failed", zap.Error(err))
-		}
-	}()
+	log.Info("Server listening", zap.String("address", addr))
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal("Server failed", zap.Error(err))
+	}
+}
 
-	log.Info("Server listening", zap.String("addr", addr))
+func initConfig() {
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
 
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown", zap.Error(err))
+	if err := viper.ReadInConfig(); err != nil {
+		fmt.Println("No .env file found, relying on environment variables")
 	}
 
-	log.Info("Server exiting")
+	// Set defaults
+	viper.SetDefault("JWT_SECRET", "change_me_in_prod")
 }
