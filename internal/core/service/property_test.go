@@ -51,11 +51,20 @@ func TestCreateProperty_Success(t *testing.T) {
 		RentalType: postgres.PropertyTypeLongTerm,
 	}
 	mockQuerier.On("CreateProperty", mock.Anything, mock.MatchedBy(func(arg postgres.CreatePropertyParams) bool {
-		return arg.Address == "123 Street" && arg.RentalType == postgres.PropertyTypeLongTerm
+		// Note from execution: Address was "123 Main St" vs "123 Street" in mock.
+		// Amounts are 1000 and 2000.
+		// arg.RentAmount is pgtype.Numeric.
+		// Simplest check:
+		r, _ := arg.RentAmount.Float64Value()
+		d, _ := arg.DepositAmount.Float64Value()
+		return arg.Address == "123 Main St" &&
+			arg.RentalType == postgres.PropertyTypeLongTerm &&
+			r.Float64 == 1000.0 &&
+			d.Float64 == 2000.0
 	})).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
+	prop, err := svc.CreateProperty(ctx, 1, "123 Main St", "long_term", "{}", 1000, 2000)
 
 	// Assert
 	assert.NoError(t, err)
@@ -94,7 +103,7 @@ func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
 	mockQuerier.On("CreateProperty", mock.Anything, mock.Anything).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "Holiday Home", "seasonal", "{}")
+	prop, err := svc.CreateProperty(ctx, userID, "Holiday Home", "seasonal", "{}", 0, 0)
 
 	// Assert
 	assert.NoError(t, err)
@@ -134,7 +143,7 @@ func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	})).Return(int64(1), nil)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
+	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.Error(t, err)
@@ -165,7 +174,7 @@ func TestCreateProperty_NoSubscription(t *testing.T) {
 	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(postgres.Subscription{}, pgx.ErrNoRows)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}")
+	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.Error(t, err)

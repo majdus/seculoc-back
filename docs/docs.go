@@ -149,10 +149,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/handler.LoginResponse"
                         }
                     },
                     "400": {
@@ -249,6 +246,96 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/invitations/{token}": {
+            "get": {
+                "description": "Get details for an invitation by token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "invitations"
+                ],
+                "summary": "Get invitation details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Invitation Token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/service.InvitationDetailsDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/leases": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all active leases where the authenticated user is the tenant",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "leases"
+                ],
+                "summary": "List user leases",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/service.LeaseDTO"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -693,6 +780,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "deposit_amount": {
+                    "type": "number"
+                },
                 "details": {
                     "type": "object",
                     "additionalProperties": true
@@ -705,6 +795,9 @@ const docTemplate = `{
                 },
                 "owner_id": {
                     "type": "integer"
+                },
+                "rent_amount": {
+                    "type": "number"
                 },
                 "rental_type": {
                     "type": "string"
@@ -811,6 +904,61 @@ const docTemplate = `{
                 },
                 "can_act_as_tenant": {
                     "type": "boolean"
+                }
+            }
+        },
+        "service.InvitationDetailsDTO": {
+            "type": "object",
+            "properties": {
+                "deposit_amount": {
+                    "type": "number"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "owner_name": {
+                    "type": "string"
+                },
+                "property_address": {
+                    "type": "string"
+                },
+                "rent_amount": {
+                    "type": "number"
+                }
+            }
+        },
+        "service.LeaseDTO": {
+            "type": "object",
+            "properties": {
+                "contract_url": {
+                    "type": "string"
+                },
+                "deposit_amount": {
+                    "type": "number"
+                },
+                "end_date": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "property_address": {
+                    "type": "string"
+                },
+                "property_id": {
+                    "type": "integer"
+                },
+                "rent_amount": {
+                    "type": "number"
+                },
+                "rental_type": {
+                    "type": "string"
+                },
+                "start_date": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },

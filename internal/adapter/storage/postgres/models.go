@@ -308,6 +308,8 @@ type Property struct {
 	Address        string           `json:"address"`
 	RentalType     PropertyType     `json:"rental_type"`
 	Details        []byte           `json:"details"`
+	RentAmount     pgtype.Numeric   `json:"rent_amount"`
+	DepositAmount  pgtype.Numeric   `json:"deposit_amount"`
 	VacancyCredits int32            `json:"vacancy_credits"`
 	IsActive       pgtype.Bool      `json:"is_active"`
 	CreatedAt      pgtype.Timestamp `json:"created_at"`

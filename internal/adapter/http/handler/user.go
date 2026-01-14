@@ -115,7 +115,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 	}
 
 	// Generate Token
-	token, err := auth.GenerateToken(authResp.User.ID, authResp.User.Email)
+	token, err := auth.GenerateToken(authResp.User.ID, authResp.User.Email, string(authResp.CurrentContext))
 	if err != nil {
 		log.Error("failed to generate token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
@@ -157,7 +157,7 @@ type SwitchContextRequest struct {
 // @Accept       json
 // @Produce      json
 // @Param        request body SwitchContextRequest true "Context Info"
-// @Success      200  {object}  map[string]string
+// @Success      200  {object}  LoginResponse
 // @Failure      400  {object}  map[string]string
 // @Router       /auth/switch-context [post]
 func (h *UserHandler) SwitchContext(c *gin.Context) {
@@ -176,12 +176,53 @@ func (h *UserHandler) SwitchContext(c *gin.Context) {
 		return
 	}
 
-	err := h.svc.SwitchContext(c.Request.Context(), userID.(int32), req.TargetContext)
+	// Call service to switch context and get fresh auth data
+	authResp, err := h.svc.SwitchContext(c.Request.Context(), userID.(int32), req.TargetContext)
 	if err != nil {
 		log.Error("failed to switch context", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to switch context"})
+		// Check for specific error messages (e.g. capability) could improve UX
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.Status(http.StatusOK)
+	// Generate NEW Token with updated context claims if needed
+	// Assuming GenerateToken encodes basic info. If it encodes context, we need to pass it.
+	// Current GenerateToken(id, email) -> It likely does NOT encode context?
+	// Wait, if it doesn't encode context, why did the user say "if the token doesn't change, the frontend remains blocked"?
+	// Ah, maybe the frontend relies on claims in the token for "context".
+	// Let's verify auth.GenerateToken. Even if it doesn't, returning a new token acts as a signal.
+	// But critically: The User Request said "GÉNÉRER UN NOUVEAU TOKEN JWT... Ce token doit contenir le claim current_context".
+
+	// I need to check auth.GenerateToken signature.
+	// Assuming for now I can call it.
+	token, err := auth.GenerateToken(authResp.User.ID, authResp.User.Email, string(authResp.CurrentContext))
+	if err != nil {
+		log.Error("failed to generate token", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	// Prepare Response (Same as LoginResponse)
+	// Construct SafeUser
+	safeUser := SafeUser{
+		ID:         authResp.User.ID,
+		Email:      authResp.User.Email,
+		FirstName:  authResp.User.FirstName.String,
+		LastName:   authResp.User.LastName.String,
+		Phone:      authResp.User.PhoneNumber.String,
+		IsVerified: authResp.User.IsVerified.Bool,
+	}
+	if authResp.User.StripeCustomerID.Valid {
+		safeUser.StripeCusID = authResp.User.StripeCustomerID.String
+	}
+
+	response := LoginResponse{
+		Token:          token,
+		CurrentContext: authResp.CurrentContext,
+		Capabilities:   authResp.Capabilities,
+	}
+	response.User.SafeUser = safeUser
+	response.User.OwnerProfile = authResp.Profile
+
+	c.JSON(http.StatusOK, response)
 }

@@ -137,3 +137,32 @@ func (h *InvitationHandler) AcceptInvitation(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "invitation accepted"})
 }
+
+// GetInvitation godoc
+// @Summary      Get invitation details
+// @Description  Get details for an invitation by token
+// @Tags         invitations
+// @Accept       json
+// @Produce      json
+// @Param        token path string true "Invitation Token"
+// @Success      200  {object}  service.InvitationDetailsDTO
+// @Failure      400  {object}  map[string]string
+// @Router       /invitations/{token} [get]
+func (h *InvitationHandler) GetInvitation(c *gin.Context) {
+	log := logger.FromContext(c.Request.Context())
+	token := c.Param("token")
+
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "token is required"})
+		return
+	}
+
+	details, err := h.svc.GetInvitationDetails(c.Request.Context(), token)
+	if err != nil {
+		log.Warn("failed to get invitation details", zap.Error(err), zap.String("token", token))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, details)
+}

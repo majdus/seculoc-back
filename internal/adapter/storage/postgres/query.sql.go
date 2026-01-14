@@ -182,18 +182,22 @@ INSERT INTO properties (
   owner_id,
   address,
   rental_type,
-  details
+  details,
+  rent_amount,
+  deposit_amount
 ) VALUES (
-  $1, $2, $3, $4
+  $1, $2, $3, $4, $5, $6
 )
-RETURNING id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at
+RETURNING id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
 `
 
 type CreatePropertyParams struct {
-	OwnerID    pgtype.Int4  `json:"owner_id"`
-	Address    string       `json:"address"`
-	RentalType PropertyType `json:"rental_type"`
-	Details    []byte       `json:"details"`
+	OwnerID       pgtype.Int4    `json:"owner_id"`
+	Address       string         `json:"address"`
+	RentalType    PropertyType   `json:"rental_type"`
+	Details       []byte         `json:"details"`
+	RentAmount    pgtype.Numeric `json:"rent_amount"`
+	DepositAmount pgtype.Numeric `json:"deposit_amount"`
 }
 
 func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error) {
@@ -202,6 +206,8 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		arg.Address,
 		arg.RentalType,
 		arg.Details,
+		arg.RentAmount,
+		arg.DepositAmount,
 	)
 	var i Property
 	err := row.Scan(
@@ -210,6 +216,8 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
+		&i.RentAmount,
+		&i.DepositAmount,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
@@ -372,7 +380,7 @@ func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Lease
 }
 
 const getProperty = `-- name: GetProperty :one
-SELECT id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1
 `
 
@@ -385,6 +393,8 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
+		&i.RentAmount,
+		&i.DepositAmount,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
@@ -488,8 +498,66 @@ func (q *Queries) HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int
 	return exists, err
 }
 
+const listLeasesByTenant = `-- name: ListLeasesByTenant :many
+SELECT 
+    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.deposit_amount, l.lease_status, l.contract_url, l.created_at,
+    p.address as property_address, p.rental_type
+FROM leases l
+JOIN properties p ON l.property_id = p.id
+WHERE l.tenant_id = $1
+ORDER BY l.created_at DESC
+`
+
+type ListLeasesByTenantRow struct {
+	ID              int32            `json:"id"`
+	PropertyID      pgtype.Int4      `json:"property_id"`
+	TenantID        pgtype.Int4      `json:"tenant_id"`
+	StartDate       pgtype.Date      `json:"start_date"`
+	EndDate         pgtype.Date      `json:"end_date"`
+	RentAmount      pgtype.Numeric   `json:"rent_amount"`
+	DepositAmount   pgtype.Numeric   `json:"deposit_amount"`
+	LeaseStatus     pgtype.Text      `json:"lease_status"`
+	ContractUrl     pgtype.Text      `json:"contract_url"`
+	CreatedAt       pgtype.Timestamp `json:"created_at"`
+	PropertyAddress string           `json:"property_address"`
+	RentalType      PropertyType     `json:"rental_type"`
+}
+
+func (q *Queries) ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) ([]ListLeasesByTenantRow, error) {
+	rows, err := q.db.Query(ctx, listLeasesByTenant, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLeasesByTenantRow
+	for rows.Next() {
+		var i ListLeasesByTenantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PropertyID,
+			&i.TenantID,
+			&i.StartDate,
+			&i.EndDate,
+			&i.RentAmount,
+			&i.DepositAmount,
+			&i.LeaseStatus,
+			&i.ContractUrl,
+			&i.CreatedAt,
+			&i.PropertyAddress,
+			&i.RentalType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
-SELECT id, owner_id, address, rental_type, details, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
 WHERE owner_id = $1 AND is_active = true
 ORDER BY created_at DESC
 `
@@ -509,6 +577,8 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 			&i.Address,
 			&i.RentalType,
 			&i.Details,
+			&i.RentAmount,
+			&i.DepositAmount,
 			&i.VacancyCredits,
 			&i.IsActive,
 			&i.CreatedAt,

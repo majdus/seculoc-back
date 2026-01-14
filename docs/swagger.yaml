@@ -61,6 +61,8 @@ definitions:
         type: string
       created_at:
         type: string
+      deposit_amount:
+        type: number
       details:
         additionalProperties: true
         type: object
@@ -70,6 +72,8 @@ definitions:
         type: boolean
       owner_id:
         type: integer
+      rent_amount:
+        type: number
       rental_type:
         type: string
       vacancy_credits:
@@ -141,6 +145,42 @@ definitions:
         type: boolean
       can_act_as_tenant:
         type: boolean
+    type: object
+  service.InvitationDetailsDTO:
+    properties:
+      deposit_amount:
+        type: number
+      email:
+        type: string
+      owner_name:
+        type: string
+      property_address:
+        type: string
+      rent_amount:
+        type: number
+    type: object
+  service.LeaseDTO:
+    properties:
+      contract_url:
+        type: string
+      deposit_amount:
+        type: number
+      end_date:
+        type: string
+      id:
+        type: integer
+      property_address:
+        type: string
+      property_id:
+        type: integer
+      rent_amount:
+        type: number
+      rental_type:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: string
     type: object
   service.SubscriptionDTO:
     properties:
@@ -270,9 +310,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handler.LoginResponse'
         "400":
           description: Bad Request
           schema:
@@ -312,6 +350,33 @@ paths:
       summary: Invite a tenant
       tags:
       - invitations
+  /invitations/{token}:
+    get:
+      consumes:
+      - application/json
+      description: Get details for an invitation by token
+      parameters:
+      - description: Invitation Token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.InvitationDetailsDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get invitation details
+      tags:
+      - invitations
   /invitations/accept:
     post:
       consumes:
@@ -342,6 +407,37 @@ paths:
       summary: Accept an invitation
       tags:
       - invitations
+  /leases:
+    get:
+      consumes:
+      - application/json
+      description: Get all active leases where the authenticated user is the tenant
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/service.LeaseDTO'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List user leases
+      tags:
+      - leases
   /properties:
     get:
       consumes:

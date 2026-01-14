@@ -71,8 +71,15 @@ func (s *UserService) InviteTenant(ctx context.Context, ownerID int32, propertyI
 		return nil, err
 	}
 
-	// TODO: Send Email (Mocked for now)
-	log.Info("invitation created (email mocked)", zap.String("email", email), zap.String("token", token))
+	// Send Email
+	inviteLink := fmt.Sprintf("%s/register?token=%s", s.frontendURL, token)
+	err = s.emailSender.SendInvitation(ctx, email, inviteLink)
+	if err != nil {
+		log.Warn("failed to send invitation email", zap.Error(err))
+		// We don't fail the request, but valid to warn.
+	}
+
+	log.Info("invitation created and sent", zap.String("email", email))
 
 	return &invitation, nil
 }
@@ -91,10 +98,7 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 		}
 
 		// 2. Validate Status and Expiry
-		if inv.Status.String != "pending" { // Assuming status is handled as text in SQLC or we need to check generated type.
-			// SQL Schema says DEFAULT 'pending'.
-			// postgres.LeaseInvitation.Status is likely pgtype.Text or string?
-			// Let's assume pgtype.Text based on other models.
+		if inv.Status.String != "pending" {
 			return fmt.Errorf("invitation is not pending")
 		}
 		// Check expiry
@@ -102,33 +106,86 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 			return fmt.Errorf("invitation expired")
 		}
 
-		// 3. Link User (Create Lease Draft)
-		// For MVP, establishing link. Rent/Deposit set to 0 or placeholders as we don't have them in invitation.
-		// Wait, RentAmount and DepositAmount are NOT NULL in schema.
-		// We need values. Maybe get from Property details if available, or set 0 (placeholder).
-		// Let's set 0 for now as 'draft'.
+		// 3. Get Property Details (Rent/Deposit)
+		prop, err := q.GetProperty(ctx, inv.PropertyID)
+		if err != nil {
+			return fmt.Errorf("property not found")
+		}
 
-		// Correction: Using dummy values for now.
-		zero := pgtype.Numeric{}
-		zero.Scan("0")
-
+		// 4. Link User (Create Lease Draft)
 		_, err = q.CreateLease(ctx, postgres.CreateLeaseParams{
 			PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
 			TenantID:      pgtype.Int4{Int32: userID, Valid: true},
 			StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
-			RentAmount:    zero,
-			DepositAmount: zero,
+			RentAmount:    prop.RentAmount,
+			DepositAmount: prop.DepositAmount,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create lease: %w", err)
 		}
 
-		// 4. Update Invitation Status
+		// 5. Update Invitation Status
 		err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
 			ID:     inv.ID,
-			Status: pgtype.Text{String: "accepted", Valid: true}, // Check specific type
+			Status: pgtype.Text{String: "accepted", Valid: true},
 		})
 
 		return err
 	})
+}
+
+// InvitationDetailsDTO contains info for the public landing page
+type InvitationDetailsDTO struct {
+	Email           string  `json:"email"`
+	PropertyAddress string  `json:"property_address"`
+	RentAmount      float64 `json:"rent_amount"`
+	DepositAmount   float64 `json:"deposit_amount"`
+	OwnerName       string  `json:"owner_name"`
+}
+
+// GetInvitationDetails retrieves limited details for the invitation landing page.
+func (s *UserService) GetInvitationDetails(ctx context.Context, token string) (*InvitationDetailsDTO, error) {
+	var details InvitationDetailsDTO
+
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		// 1. Get Inv
+		inv, err := q.GetInvitationByToken(ctx, token)
+		if err != nil {
+			return err
+		}
+
+		if inv.Status.String != "pending" {
+			return fmt.Errorf("invitation invalid or expired")
+		}
+		if inv.ExpiresAt.Time.Before(time.Now()) {
+			return fmt.Errorf("invitation expired")
+		}
+
+		details.Email = inv.TenantEmail
+
+		// 2. Get Property
+		prop, err := q.GetProperty(ctx, inv.PropertyID)
+		if err != nil {
+			return err
+		}
+		details.PropertyAddress = prop.Address
+		rent, _ := prop.RentAmount.Float64Value()
+		deposit, _ := prop.DepositAmount.Float64Value()
+		details.RentAmount = rent.Float64
+		details.DepositAmount = deposit.Float64
+
+		// 3. Get Owner Name
+		owner, err := q.GetUserById(ctx, inv.OwnerID)
+		if err != nil {
+			return err
+		}
+		details.OwnerName = fmt.Sprintf("%s %s", owner.FirstName.String, owner.LastName.String)
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return &details, nil
 }

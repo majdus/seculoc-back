@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/platform/email"
 	"seculoc-back/internal/platform/logger"
 )
 
@@ -47,14 +49,18 @@ type AuthResponse struct {
 }
 
 type UserService struct {
-	txManager TxManager
-	log       *zap.Logger
+	txManager   TxManager
+	log         *zap.Logger
+	emailSender email.EmailSender
+	frontendURL string
 }
 
-func NewUserService(txManager TxManager, l *zap.Logger) *UserService {
+func NewUserService(txManager TxManager, l *zap.Logger, emailSender email.EmailSender, frontendURL string) *UserService {
 	return &UserService{
-		txManager: txManager,
-		log:       l,
+		txManager:   txManager,
+		log:         l,
+		emailSender: emailSender,
+		frontendURL: frontendURL,
 	}
 }
 
@@ -75,24 +81,11 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 			return err
 		}
 
-		// 2. Create User
+		// 2. Prepare User Data
 		hashedPassword := "hashed_" + password
+		initialContext := "owner" // Default
 
-		// Determine Initial Context
-		initialContext := "owner"
-		if inviteToken != "" {
-			// Validate Token existence (Minimal check here, more robust would be check status/validity)
-			// Assuming caller might validate or we trust token implies tenant intent.
-			// Let's check if invitation exists to be safe and set tenant context.
-			_, err := q.GetInvitationByToken(ctx, inviteToken)
-			if err == nil {
-				initialContext = "tenant"
-			} else {
-				log.Error("invalid invitation token", zap.Error(err))
-				return fmt.Errorf("invalid invitation token")
-			}
-		}
-
+		// 3. Create User
 		params := postgres.CreateUserParams{
 			Email:           email,
 			PasswordHash:    hashedPassword,
@@ -107,6 +100,73 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 			log.Error("registration failed during creation", zap.Error(err))
 			return err
 		}
+
+		// 4. Handle Invitation (if present)
+		if inviteToken != "" {
+			// Find Invitation
+			inv, err := q.GetInvitationByToken(ctx, inviteToken)
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					log.Warn("invalid invitation token during register", zap.String("token", inviteToken))
+					return fmt.Errorf("invalid invitation token")
+				}
+				return err
+			}
+
+			// Validate Status/Expiry
+			if inv.Status.String != "pending" {
+				return fmt.Errorf("invitation is not pending")
+			}
+			if inv.ExpiresAt.Time.Before(time.Now()) {
+				return fmt.Errorf("invitation expired")
+			}
+
+			// Get Property to get Rent/Deposit
+			prop, err := q.GetProperty(ctx, inv.PropertyID)
+			if err != nil {
+				return fmt.Errorf("property not found for invitation")
+			}
+
+			// Create Lease
+			// Assuming RentAmount and DepositAmount in Property are valid (handled in CreateProperty)
+			// They are Nullable in DB? I set them as DECIMAL(10,2) in schema, default nullable.
+			// pgtype.Numeric needs handling.
+
+			_, err = q.CreateLease(ctx, postgres.CreateLeaseParams{
+				PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
+				TenantID:      pgtype.Int4{Int32: user.ID, Valid: true},
+				StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
+				RentAmount:    prop.RentAmount,
+				DepositAmount: prop.DepositAmount,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to link property: %w", err)
+			}
+
+			// Update Invitation Status
+			err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
+				ID:     inv.ID,
+				Status: pgtype.Text{String: "accepted", Valid: true},
+			})
+			if err != nil {
+				return err
+			}
+
+			// Update User Context to Tenant
+			// We already created user with 'owner', let's update it or ideally set it in CreateUser.
+			// Since we created user above, let's update it here.
+			err = q.UpdateLastContext(ctx, postgres.UpdateLastContextParams{
+				ID:              user.ID,
+				LastContextUsed: pgtype.Text{String: "tenant", Valid: true},
+			})
+			if err != nil {
+				return err
+			}
+
+			// Update local user object for return
+			user.LastContextUsed = pgtype.Text{String: "tenant", Valid: true}
+		}
+
 		return nil
 	})
 
@@ -165,11 +225,11 @@ func (s *UserService) GetFullAuthResponse(ctx context.Context, user *postgres.Us
 
 	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
 		// Check Owner Capability
-		countProps, err := q.CountPropertiesByOwner(ctx, pgtype.Int4{Int32: user.ID, Valid: true})
-		if err != nil {
-			return err
-		}
-		caps.CanActAsOwner = countProps > 0
+		// In an Airbnb-style model, any user can potentially be an owner (create properties).
+		// We shouldn't restrict this based on having existing properties.
+		// However, knowing if they have properties is useful for UI hints, but the capability itself is broad.
+		// For now, let's allow everyone to act as owner.
+		caps.CanActAsOwner = true
 
 		// Check Tenant Capability
 		countLeases, err := q.CountLeasesByTenant(ctx, pgtype.Int4{Int32: user.ID, Valid: true})
@@ -272,15 +332,75 @@ func (s *UserService) GetUserByID(ctx context.Context, userID int32) (*postgres.
 }
 
 // SwitchContext updates the user's preferred context.
-func (s *UserService) SwitchContext(ctx context.Context, userID int32, targetContext string) error {
-	return s.txManager.WithTx(ctx, func(q postgres.Querier) error {
-		// Validations could be added (Check if user HAS capability for targetContext)
-		// For MVP, just update.
+// SwitchContext updates the user's preferred context and returns fresh auth data.
+func (s *UserService) SwitchContext(ctx context.Context, userID int32, targetContext string) (*AuthResponse, error) {
+	log := logger.FromContext(ctx)
+	var authResp *AuthResponse
 
+	// 1. Verify Capabilities & Update
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		// Validations: Check if user HAS capability for targetContext
+		var allowed bool
+		if targetContext == "owner" {
+			// Owner is allowed for everyone (Airbnb style)
+			allowed = true
+		} else if targetContext == "tenant" {
+			// Check if they are actually a tenant (leases or bookings)
+			countLeases, err := q.CountLeasesByTenant(ctx, pgtype.Int4{Int32: userID, Valid: true})
+			if err != nil {
+				return err
+			}
+			countBookings, err := q.CountBookingsByTenant(ctx, pgtype.Int4{Int32: userID, Valid: true})
+			if err != nil {
+				return err
+			}
+			allowed = (countLeases > 0) || (countBookings > 0)
+		} else {
+			return fmt.Errorf("invalid context: %s", targetContext)
+		}
+
+		if !allowed {
+			return fmt.Errorf("user does not have capability to switch to %s", targetContext)
+		}
+
+		// Update DB
 		err := q.UpdateLastContext(ctx, postgres.UpdateLastContextParams{
 			ID:              userID,
 			LastContextUsed: pgtype.Text{String: targetContext, Valid: true},
 		})
-		return err
+		if err != nil {
+			return err
+		}
+
+		return nil
 	})
+
+	if err != nil {
+		log.Warn("switch context failed", zap.Error(err))
+		return nil, err
+	}
+
+	// 2. Fetch Fresh Data (Profile, Capabilities, etc.)
+	// fetching user first
+	user, err := s.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// This will calculate capabilities fresh and return the response.
+	// Note: GetFullAuthResponse respects LastContextUsed from DB, which we just updated.
+	authResp, err = s.GetFullAuthResponse(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sanity verify: Ensure returned context matches desired target
+	if string(authResp.CurrentContext) != targetContext {
+		log.Warn("switch context mismatch",
+			zap.String("target", targetContext),
+			zap.String("actual", string(authResp.CurrentContext)))
+		// Proceeding anyway, but logging warning. Logic in GetFullAuthResponse should honor sticky state if valid.
+	}
+
+	return authResp, nil
 }

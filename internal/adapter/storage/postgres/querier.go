@@ -30,6 +30,7 @@ type Querier interface {
 	GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error)
 	GetUserSubscription(ctx context.Context, userID pgtype.Int4) (Subscription, error)
 	HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error)
+	ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) ([]ListLeasesByTenantRow, error)
 	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
 	SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error)
 	UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error

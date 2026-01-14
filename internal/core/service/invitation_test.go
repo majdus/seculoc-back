@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -12,13 +13,15 @@ import (
 	"go.uber.org/zap"
 
 	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/platform/email"
 )
 
 func TestInviteTenant_Success(t *testing.T) {
 	// Setup
-	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
-	svc := NewUserService(mockTx, zap.NewNop())
+	mockQuerier := new(MockQuerier)
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -59,7 +62,8 @@ func TestAcceptInvitation_Success(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
-	svc := NewUserService(mockTx, zap.NewNop())
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -75,6 +79,13 @@ func TestAcceptInvitation_Success(t *testing.T) {
 		PropertyID: 100,
 		Status:     pgtype.Text{String: "pending", Valid: true},
 		ExpiresAt:  pgtype.Timestamp{Time: time.Now().Add(24 * time.Hour), Valid: true},
+	}, nil)
+
+	// Mock GetProperty
+	mockQuerier.On("GetProperty", mock.Anything, int32(100)).Return(postgres.Property{
+		ID:            100,
+		RentAmount:    pgtype.Numeric{Int: big.NewInt(1000), Valid: true},
+		DepositAmount: pgtype.Numeric{Int: big.NewInt(2000), Valid: true},
 	}, nil)
 
 	// Mock CreateLease
@@ -98,7 +109,8 @@ func TestAcceptInvitation_Expired(t *testing.T) {
 	// Setup
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
-	svc := NewUserService(mockTx, zap.NewNop())
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("invitation expired")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)

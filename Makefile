@@ -21,6 +21,9 @@ clean:
 sqlc:
 	$(HOME)/go/bin/sqlc generate
 
+swagger:
+	$(HOME)/go/bin/swag init -g cmd/server/main.go
+
 # Docker & Database
 docker-up:
 	docker compose up -d

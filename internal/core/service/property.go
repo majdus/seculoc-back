@@ -25,7 +25,7 @@ func NewPropertyService(txManager TxManager, l *zap.Logger) *PropertyService {
 	}
 }
 
-func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, address string, rentalType string, detailsJSON string) (*postgres.Property, error) {
+func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, address string, rentalType string, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
 	log := logger.FromContext(ctx)
 	var prop postgres.Property
 
@@ -68,11 +68,19 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 		}
 
 		// 4. Create
+		rentNumeric := pgtype.Numeric{}
+		rentNumeric.Scan(fmt.Sprintf("%f", rentAmount)) // Simplistic scan, better to use string if accurate
+
+		depositNumeric := pgtype.Numeric{}
+		depositNumeric.Scan(fmt.Sprintf("%f", depositAmount))
+
 		prop, err = q.CreateProperty(ctx, postgres.CreatePropertyParams{
-			OwnerID:    pgtype.Int4{Int32: userID, Valid: true},
-			Address:    address,
-			RentalType: pType,
-			Details:    []byte(detailsJSON),
+			OwnerID:       pgtype.Int4{Int32: userID, Valid: true},
+			Address:       address,
+			RentalType:    pType,
+			Details:       []byte(detailsJSON),
+			RentAmount:    rentNumeric,
+			DepositAmount: depositNumeric,
 		})
 		if err != nil {
 			return err

@@ -56,7 +56,7 @@ func TestCreateProperty_Discovery_GrantsBonus(t *testing.T) {
 	})
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "Bonus St", "long_term", "{}")
+	prop, err := svc.CreateProperty(ctx, 1, "123 Main St", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.NoError(t, err)
@@ -98,7 +98,7 @@ func TestCreateProperty_Discovery_BonusAlreadyReceived(t *testing.T) {
 	})
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "Bonus St 2", "long_term", "{}")
+	_, err := svc.CreateProperty(ctx, userID, "Bonus St 2", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.NoError(t, err)

@@ -49,7 +49,7 @@ func TestE2E_DeleteProperty(t *testing.T) {
 	var propResp map[string]interface{}
 	json.Unmarshal(w.Body.Bytes(), &propResp)
 	var propID int
-	if pid, ok := propResp["property_id"].(float64); ok {
+	if pid, ok := propResp["id"].(float64); ok {
 		propID = int(pid)
 	}
 	require.NotZero(t, propID)

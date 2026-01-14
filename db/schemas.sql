@@ -74,6 +74,8 @@ CREATE TABLE properties (
     address TEXT NOT NULL,
     rental_type property_type NOT NULL, -- Longue durée ou Saisonnier [cite: 5]
     details JSONB, -- Surface, nbr pièces, description
+    rent_amount DECIMAL(10, 2),
+    deposit_amount DECIMAL(10, 2),
     vacancy_credits INTEGER NOT NULL DEFAULT 20,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -14,24 +14,28 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/platform/email"
 )
 
-func TestRegisterUser_Success(t *testing.T) {
-	// 1. Setup
-	core, _ := observer.New(zap.InfoLevel)
-	testLogger := zap.New(core)
+// Tests
+func TestRegister_Success(t *testing.T) {
+	// Setup
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
 
-	// Wire Tx
+	// Mock Transaction Behavior
+	// When WithTx is called, it should execute the callback function passed to it.
+	// In our service, WithTx(ctx, func(q Querier) error { ... })
+	// So we need to call the function arg[1] with our specific mockQuerier
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewUserService(mockTx, testLogger)
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
 
-	// 2. Mocks
+	// Mocks
 	// GetUserByEmail should return NoRows (user does not exist)
 	mockQuerier.On("GetUserByEmail", mock.Anything, "test@example.com").Return(postgres.User{}, pgx.ErrNoRows)
 
@@ -67,7 +71,15 @@ func TestRegisterUser_AlreadyExists(t *testing.T) {
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewUserService(mockTx, testLogger)
+	// emailSender2 := email.NewMockEmailSender(zap.NewNop())
+	// Reuse existing emailSender logic or ensure single declaration.
+	// Actually, I can just not redeclare it, assuming it wasn't declared above in THIS scope.
+	// Wait, in previous step I saw:
+	// emailSender := email.NewMockEmailSender(zap.NewNop())
+	// emailSender := email.NewMockEmailSender(zap.NewNop()) // THIS IS THE BUG
+
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, testLogger, emailSender, "http://test.com")
 
 	// 2. Mocks
 	// GetUserByEmail returns a user (conflict)
@@ -93,7 +105,8 @@ func TestLogin_Success(t *testing.T) {
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewUserService(mockTx, zap.NewNop())
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
 
 	// Mock
 	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: "hashed_password123"}
@@ -122,7 +135,8 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	// Mock Tx for Case 1
 	mockTx2 := new(MockTxManager)
 	mockQuerier2 := new(MockQuerier)
-	svc2 := NewUserService(mockTx2, zap.NewNop())
+	emailSender2 := email.NewMockEmailSender(zap.NewNop())
+	svc2 := NewUserService(mockTx2, zap.NewNop(), emailSender2, "http://test.com")
 
 	mockTx2.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("invalid credentials")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -138,7 +152,8 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	// Case 2: Wrong Password
 	mockTx3 := new(MockTxManager)
 	mockQuerier3 := new(MockQuerier)
-	svc3 := NewUserService(mockTx3, zap.NewNop())
+	emailSender3 := email.NewMockEmailSender(zap.NewNop())
+	svc3 := NewUserService(mockTx3, zap.NewNop(), emailSender3, "http://test.com")
 
 	mockTx3.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -158,4 +173,72 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	_, err = svc3.Login(context.Background(), "test@example.com", "wrongpassword")
 	assert.Error(t, err)
 	assert.Equal(t, "invalid credentials", err.Error())
+}
+
+func TestSwitchContext_Success(t *testing.T) {
+	// Setup
+	mockQuerier := new(MockQuerier)
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+
+	userID := int32(1)
+
+	// Mock Capability Check for Owner (Always true, no DB call needed if efficient, but code updates DB)
+	// Code: UpdateLastContext
+	mockQuerier.On("UpdateLastContext", mock.Anything, postgres.UpdateLastContextParams{
+		ID:              userID,
+		LastContextUsed: pgtype.Text{String: "owner", Valid: true},
+	}).Return(nil)
+
+	// Mock GetUserByID
+	mockQuerier.On("GetUserById", mock.Anything, userID).Return(postgres.User{ID: userID, Email: "test@example.com", LastContextUsed: pgtype.Text{String: "owner", Valid: true}}, nil)
+
+	// Mock GetFullAuthResponse calls
+	mockQuerier.On("CountPropertiesByOwner", mock.Anything, mock.Anything).Return(int64(0), nil)
+	mockQuerier.On("CountLeasesByTenant", mock.Anything, mock.Anything).Return(int64(0), nil)
+	mockQuerier.On("CountBookingsByTenant", mock.Anything, mock.Anything).Return(int64(0), nil)
+	mockQuerier.On("GetUserSubscription", mock.Anything, mock.Anything).Return(postgres.Subscription{}, pgx.ErrNoRows)
+	mockQuerier.On("GetUserCreditBalance", mock.Anything, mock.Anything).Return(int32(0), nil)
+
+	// Execute
+	resp, err := svc.SwitchContext(context.Background(), userID, "owner")
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, ContextOwner, resp.CurrentContext)
+}
+
+func TestSwitchContext_Forbidden(t *testing.T) {
+	// Setup
+	mockQuerier := new(MockQuerier)
+	mockTx := new(MockTxManager)
+
+	// Mock Tx
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("user does not have capability to switch to tenant")).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	emailSender := email.NewMockEmailSender(zap.NewNop())
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+
+	userID := int32(1)
+
+	// Mock Capability Check failing for Tenant
+	mockQuerier.On("CountLeasesByTenant", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int64(0), nil)
+	mockQuerier.On("CountBookingsByTenant", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(int64(0), nil)
+
+	// Execute
+	_, err := svc.SwitchContext(context.Background(), userID, "tenant")
+
+	// Assert
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not have capability")
 }

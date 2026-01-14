@@ -9,15 +9,16 @@ import (
 )
 
 type Claims struct {
-	UserID int32  `json:"user_id"`
-	Email  string `json:"email"`
+	UserID         int32  `json:"user_id"`
+	Email          string `json:"email"`
+	CurrentContext string `json:"current_context,omitempty"`
 	jwt.RegisteredClaims
 }
 
 var ErrInvalidToken = errors.New("invalid token")
 
-// GenerateToken generates a JWT token for the user.
-func GenerateToken(userID int32, email string) (string, error) {
+// GenerateToken generates a JWT token for the user with context.
+func GenerateToken(userID int32, email, currentContext string) (string, error) {
 	secret := viper.GetString("JWT_SECRET")
 	if secret == "" {
 		return "", errors.New("JWT_SECRET not setup")
@@ -25,8 +26,9 @@ func GenerateToken(userID int32, email string) (string, error) {
 
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
+		UserID:         userID,
+		Email:          email,
+		CurrentContext: currentContext,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

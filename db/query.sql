@@ -33,9 +33,11 @@ INSERT INTO properties (
   owner_id,
   address,
   rental_type,
-  details
+  details,
+  rent_amount,
+  deposit_amount
 ) VALUES (
-  $1, $2, $3, $4
+  $1, $2, $3, $4, $5, $6
 )
 RETURNING *;
 
@@ -138,3 +140,12 @@ INSERT INTO leases (
     $1, $2, $3, $4, $5, 'draft'
 )
 RETURNING *;
+
+-- name: ListLeasesByTenant :many
+SELECT 
+    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.deposit_amount, l.lease_status, l.contract_url, l.created_at,
+    p.address as property_address, p.rental_type
+FROM leases l
+JOIN properties p ON l.property_id = p.id
+WHERE l.tenant_id = $1
+ORDER BY l.created_at DESC;
