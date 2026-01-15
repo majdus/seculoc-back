@@ -146,6 +146,7 @@ const (
 	SolvencyStatusApproved         SolvencyStatus = "approved"
 	SolvencyStatusRejected         SolvencyStatus = "rejected"
 	SolvencyStatusInsufficientDocs SolvencyStatus = "insufficient_docs"
+	SolvencyStatusCancelled        SolvencyStatus = "cancelled"
 )
 
 func (e *SolvencyStatus) Scan(src interface{}) error {
@@ -305,6 +306,7 @@ type LeaseInvitation struct {
 type Property struct {
 	ID             int32            `json:"id"`
 	OwnerID        pgtype.Int4      `json:"owner_id"`
+	Name           pgtype.Text      `json:"name"`
 	Address        string           `json:"address"`
 	RentalType     PropertyType     `json:"rental_type"`
 	Details        []byte           `json:"details"`
@@ -344,9 +346,11 @@ type SeasonalBooking struct {
 type SolvencyCheck struct {
 	ID               int32              `json:"id"`
 	InitiatorOwnerID pgtype.Int4        `json:"initiator_owner_id"`
-	CandidateEmail   string             `json:"candidate_email"`
+	CandidateID      pgtype.Int4        `json:"candidate_id"`
+	Token            pgtype.Text        `json:"token"`
 	PropertyID       pgtype.Int4        `json:"property_id"`
 	Status           NullSolvencyStatus `json:"status"`
+	CreditSource     pgtype.Text        `json:"credit_source"`
 	ScoreResult      pgtype.Int4        `json:"score_result"`
 	ReportUrl        pgtype.Text        `json:"report_url"`
 	DocumentsJson    []byte             `json:"documents_json"`
@@ -381,12 +385,13 @@ type Transaction struct {
 type User struct {
 	ID               int32            `json:"id"`
 	Email            string           `json:"email"`
-	PasswordHash     string           `json:"password_hash"`
+	PasswordHash     pgtype.Text      `json:"password_hash"`
 	FirstName        pgtype.Text      `json:"first_name"`
 	LastName         pgtype.Text      `json:"last_name"`
 	PhoneNumber      pgtype.Text      `json:"phone_number"`
 	IsVerified       pgtype.Bool      `json:"is_verified"`
 	StripeCustomerID pgtype.Text      `json:"stripe_customer_id"`
+	IsProvisional    pgtype.Bool      `json:"is_provisional"`
 	LastContextUsed  pgtype.Text      `json:"last_context_used"`
 	CreatedAt        pgtype.Timestamp `json:"created_at"`
 }

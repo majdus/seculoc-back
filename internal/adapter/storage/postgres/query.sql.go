@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelSolvencyCheck = `-- name: CancelSolvencyCheck :exec
+UPDATE solvency_checks
+SET status = 'cancelled'
+WHERE id = $1
+`
+
+func (q *Queries) CancelSolvencyCheck(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, cancelSolvencyCheck, id)
+	return err
+}
+
+const cleanupProvisionalUsers = `-- name: CleanupProvisionalUsers :exec
+DELETE FROM users 
+WHERE is_provisional = TRUE 
+AND created_at < NOW() - INTERVAL '30 days'
+`
+
+func (q *Queries) CleanupProvisionalUsers(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, cleanupProvisionalUsers)
+	return err
+}
+
 const countBookingsByTenant = `-- name: CountBookingsByTenant :one
 SELECT COUNT(*) FROM seasonal_bookings
 WHERE tenant_id = $1 AND booking_status = 'confirmed'
@@ -179,20 +201,16 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (
-  owner_id,
-  address,
-  rental_type,
-  details,
-  rent_amount,
-  deposit_amount
+  owner_id, name, address, rental_type, details, rent_amount, deposit_amount
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
 `
 
 type CreatePropertyParams struct {
 	OwnerID       pgtype.Int4    `json:"owner_id"`
+	Name          pgtype.Text    `json:"name"`
 	Address       string         `json:"address"`
 	RentalType    PropertyType   `json:"rental_type"`
 	Details       []byte         `json:"details"`
@@ -203,6 +221,7 @@ type CreatePropertyParams struct {
 func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error) {
 	row := q.db.QueryRow(ctx, createProperty,
 		arg.OwnerID,
+		arg.Name,
 		arg.Address,
 		arg.RentalType,
 		arg.Details,
@@ -213,6 +232,7 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
+		&i.Name,
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
@@ -227,28 +247,38 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 
 const createSolvencyCheck = `-- name: CreateSolvencyCheck :one
 INSERT INTO solvency_checks (
-    initiator_owner_id, candidate_email, property_id, status
+    initiator_owner_id, candidate_id, token, property_id, status, credit_source
 ) VALUES (
-    $1, $2, $3, 'pending'
+    $1, $2, $3, $4, 'pending', $5
 )
-RETURNING id, initiator_owner_id, candidate_email, property_id, status, score_result, report_url, documents_json, created_at
+RETURNING id, initiator_owner_id, candidate_id, token, property_id, status, credit_source, score_result, report_url, documents_json, created_at
 `
 
 type CreateSolvencyCheckParams struct {
 	InitiatorOwnerID pgtype.Int4 `json:"initiator_owner_id"`
-	CandidateEmail   string      `json:"candidate_email"`
+	CandidateID      pgtype.Int4 `json:"candidate_id"`
+	Token            pgtype.Text `json:"token"`
 	PropertyID       pgtype.Int4 `json:"property_id"`
+	CreditSource     pgtype.Text `json:"credit_source"`
 }
 
 func (q *Queries) CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error) {
-	row := q.db.QueryRow(ctx, createSolvencyCheck, arg.InitiatorOwnerID, arg.CandidateEmail, arg.PropertyID)
+	row := q.db.QueryRow(ctx, createSolvencyCheck,
+		arg.InitiatorOwnerID,
+		arg.CandidateID,
+		arg.Token,
+		arg.PropertyID,
+		arg.CreditSource,
+	)
 	var i SolvencyCheck
 	err := row.Scan(
 		&i.ID,
 		&i.InitiatorOwnerID,
-		&i.CandidateEmail,
+		&i.CandidateID,
+		&i.Token,
 		&i.PropertyID,
 		&i.Status,
+		&i.CreditSource,
 		&i.ScoreResult,
 		&i.ReportUrl,
 		&i.DocumentsJson,
@@ -310,12 +340,12 @@ INSERT INTO users (
 ) VALUES (
   $1, $2, $3, $4, $5, $6
 )
-RETURNING id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at
+RETURNING id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, is_provisional, last_context_used, created_at
 `
 
 type CreateUserParams struct {
 	Email           string      `json:"email"`
-	PasswordHash    string      `json:"password_hash"`
+	PasswordHash    pgtype.Text `json:"password_hash"`
 	FirstName       pgtype.Text `json:"first_name"`
 	LastName        pgtype.Text `json:"last_name"`
 	PhoneNumber     pgtype.Text `json:"phone_number"`
@@ -341,6 +371,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.IsProvisional,
 		&i.LastContextUsed,
 		&i.CreatedAt,
 	)
@@ -380,7 +411,7 @@ func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Lease
 }
 
 const getProperty = `-- name: GetProperty :one
-SELECT id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1
 `
 
@@ -390,6 +421,7 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
+		&i.Name,
 		&i.Address,
 		&i.RentalType,
 		&i.Details,
@@ -402,8 +434,105 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 	return i, err
 }
 
+const getPropertyForUpdate = `-- name: GetPropertyForUpdate :one
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPropertyForUpdate(ctx context.Context, id int32) (Property, error) {
+	row := q.db.QueryRow(ctx, getPropertyForUpdate, id)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Address,
+		&i.RentalType,
+		&i.Details,
+		&i.RentAmount,
+		&i.DepositAmount,
+		&i.VacancyCredits,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSolvencyCheckByID = `-- name: GetSolvencyCheckByID :one
+SELECT id, initiator_owner_id, candidate_id, token, property_id, status, credit_source, score_result, report_url, documents_json, created_at FROM solvency_checks
+WHERE id = $1
+`
+
+func (q *Queries) GetSolvencyCheckByID(ctx context.Context, id int32) (SolvencyCheck, error) {
+	row := q.db.QueryRow(ctx, getSolvencyCheckByID, id)
+	var i SolvencyCheck
+	err := row.Scan(
+		&i.ID,
+		&i.InitiatorOwnerID,
+		&i.CandidateID,
+		&i.Token,
+		&i.PropertyID,
+		&i.Status,
+		&i.CreditSource,
+		&i.ScoreResult,
+		&i.ReportUrl,
+		&i.DocumentsJson,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSolvencyCheckByToken = `-- name: GetSolvencyCheckByToken :one
+SELECT 
+    sc.id, sc.initiator_owner_id, sc.candidate_id, sc.token, sc.property_id, sc.status, sc.created_at,
+    u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name,
+    p.address as property_address, p.rent_amount as property_rent_amount, p.name as property_name
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+JOIN properties p ON sc.property_id = p.id
+WHERE sc.token = $1
+ LIMIT 1
+`
+
+type GetSolvencyCheckByTokenRow struct {
+	ID                 int32              `json:"id"`
+	InitiatorOwnerID   pgtype.Int4        `json:"initiator_owner_id"`
+	CandidateID        pgtype.Int4        `json:"candidate_id"`
+	Token              pgtype.Text        `json:"token"`
+	PropertyID         pgtype.Int4        `json:"property_id"`
+	Status             NullSolvencyStatus `json:"status"`
+	CreatedAt          pgtype.Timestamp   `json:"created_at"`
+	CandidateEmail     string             `json:"candidate_email"`
+	CandidateFirstName pgtype.Text        `json:"candidate_first_name"`
+	CandidateLastName  pgtype.Text        `json:"candidate_last_name"`
+	PropertyAddress    string             `json:"property_address"`
+	PropertyRentAmount pgtype.Numeric     `json:"property_rent_amount"`
+	PropertyName       pgtype.Text        `json:"property_name"`
+}
+
+func (q *Queries) GetSolvencyCheckByToken(ctx context.Context, token pgtype.Text) (GetSolvencyCheckByTokenRow, error) {
+	row := q.db.QueryRow(ctx, getSolvencyCheckByToken, token)
+	var i GetSolvencyCheckByTokenRow
+	err := row.Scan(
+		&i.ID,
+		&i.InitiatorOwnerID,
+		&i.CandidateID,
+		&i.Token,
+		&i.PropertyID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CandidateEmail,
+		&i.CandidateFirstName,
+		&i.CandidateLastName,
+		&i.PropertyAddress,
+		&i.PropertyRentAmount,
+		&i.PropertyName,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at FROM users
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, is_provisional, last_context_used, created_at FROM users
 WHERE email = $1 LIMIT 1
 `
 
@@ -419,6 +548,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.IsProvisional,
 		&i.LastContextUsed,
 		&i.CreatedAt,
 	)
@@ -426,7 +556,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, last_context_used, created_at FROM users
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, is_provisional, last_context_used, created_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -442,6 +572,7 @@ func (q *Queries) GetUserById(ctx context.Context, id int32) (User, error) {
 		&i.PhoneNumber,
 		&i.IsVerified,
 		&i.StripeCustomerID,
+		&i.IsProvisional,
 		&i.LastContextUsed,
 		&i.CreatedAt,
 	)
@@ -458,6 +589,42 @@ func (q *Queries) GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) 
 	var current_balance int32
 	err := row.Scan(&current_balance)
 	return current_balance, err
+}
+
+const getUserCreditBalanceForUpdate = `-- name: GetUserCreditBalanceForUpdate :one
+SELECT current_balance::int FROM view_user_credit_balance
+WHERE user_id = $1
+`
+
+func (q *Queries) GetUserCreditBalanceForUpdate(ctx context.Context, userID pgtype.Int4) (int32, error) {
+	row := q.db.QueryRow(ctx, getUserCreditBalanceForUpdate, userID)
+	var current_balance int32
+	err := row.Scan(&current_balance)
+	return current_balance, err
+}
+
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+SELECT id, email, password_hash, first_name, last_name, phone_number, is_verified, stripe_customer_id, is_provisional, last_context_used, created_at FROM users
+WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetUserForUpdate(ctx context.Context, id int32) (User, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.FirstName,
+		&i.LastName,
+		&i.PhoneNumber,
+		&i.IsVerified,
+		&i.StripeCustomerID,
+		&i.IsProvisional,
+		&i.LastContextUsed,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getUserSubscription = `-- name: GetUserSubscription :one
@@ -496,6 +663,17 @@ func (q *Queries) HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const increasePropertyCredits = `-- name: IncreasePropertyCredits :exec
+UPDATE properties
+SET vacancy_credits = vacancy_credits + 1
+WHERE id = $1
+`
+
+func (q *Queries) IncreasePropertyCredits(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, increasePropertyCredits, id)
+	return err
 }
 
 const listLeasesByTenant = `-- name: ListLeasesByTenant :many
@@ -557,8 +735,8 @@ func (q *Queries) ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) 
 }
 
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
-SELECT id, owner_id, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
-WHERE owner_id = $1 AND is_active = true
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+WHERE owner_id = $1
 ORDER BY created_at DESC
 `
 
@@ -574,6 +752,7 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerID,
+			&i.Name,
 			&i.Address,
 			&i.RentalType,
 			&i.Details,
@@ -582,6 +761,129 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 			&i.VacancyCredits,
 			&i.IsActive,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSolvencyChecksByOwner = `-- name: ListSolvencyChecksByOwner :many
+SELECT sc.id, sc.initiator_owner_id, sc.candidate_id, sc.token, sc.property_id, sc.status, sc.credit_source, sc.score_result, sc.report_url, sc.documents_json, sc.created_at, u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name, p.address as property_address
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+JOIN properties p ON sc.property_id = p.id
+WHERE sc.initiator_owner_id = $1
+ORDER BY sc.created_at DESC
+`
+
+type ListSolvencyChecksByOwnerRow struct {
+	ID                 int32              `json:"id"`
+	InitiatorOwnerID   pgtype.Int4        `json:"initiator_owner_id"`
+	CandidateID        pgtype.Int4        `json:"candidate_id"`
+	Token              pgtype.Text        `json:"token"`
+	PropertyID         pgtype.Int4        `json:"property_id"`
+	Status             NullSolvencyStatus `json:"status"`
+	CreditSource       pgtype.Text        `json:"credit_source"`
+	ScoreResult        pgtype.Int4        `json:"score_result"`
+	ReportUrl          pgtype.Text        `json:"report_url"`
+	DocumentsJson      []byte             `json:"documents_json"`
+	CreatedAt          pgtype.Timestamp   `json:"created_at"`
+	CandidateEmail     string             `json:"candidate_email"`
+	CandidateFirstName pgtype.Text        `json:"candidate_first_name"`
+	CandidateLastName  pgtype.Text        `json:"candidate_last_name"`
+	PropertyAddress    string             `json:"property_address"`
+}
+
+func (q *Queries) ListSolvencyChecksByOwner(ctx context.Context, initiatorOwnerID pgtype.Int4) ([]ListSolvencyChecksByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, listSolvencyChecksByOwner, initiatorOwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSolvencyChecksByOwnerRow
+	for rows.Next() {
+		var i ListSolvencyChecksByOwnerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InitiatorOwnerID,
+			&i.CandidateID,
+			&i.Token,
+			&i.PropertyID,
+			&i.Status,
+			&i.CreditSource,
+			&i.ScoreResult,
+			&i.ReportUrl,
+			&i.DocumentsJson,
+			&i.CreatedAt,
+			&i.CandidateEmail,
+			&i.CandidateFirstName,
+			&i.CandidateLastName,
+			&i.PropertyAddress,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSolvencyChecksByProperty = `-- name: ListSolvencyChecksByProperty :many
+SELECT sc.id, sc.initiator_owner_id, sc.candidate_id, sc.token, sc.property_id, sc.status, sc.credit_source, sc.score_result, sc.report_url, sc.documents_json, sc.created_at, u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+WHERE sc.property_id = $1
+ORDER BY sc.created_at DESC
+`
+
+type ListSolvencyChecksByPropertyRow struct {
+	ID                 int32              `json:"id"`
+	InitiatorOwnerID   pgtype.Int4        `json:"initiator_owner_id"`
+	CandidateID        pgtype.Int4        `json:"candidate_id"`
+	Token              pgtype.Text        `json:"token"`
+	PropertyID         pgtype.Int4        `json:"property_id"`
+	Status             NullSolvencyStatus `json:"status"`
+	CreditSource       pgtype.Text        `json:"credit_source"`
+	ScoreResult        pgtype.Int4        `json:"score_result"`
+	ReportUrl          pgtype.Text        `json:"report_url"`
+	DocumentsJson      []byte             `json:"documents_json"`
+	CreatedAt          pgtype.Timestamp   `json:"created_at"`
+	CandidateEmail     string             `json:"candidate_email"`
+	CandidateFirstName pgtype.Text        `json:"candidate_first_name"`
+	CandidateLastName  pgtype.Text        `json:"candidate_last_name"`
+}
+
+func (q *Queries) ListSolvencyChecksByProperty(ctx context.Context, propertyID pgtype.Int4) ([]ListSolvencyChecksByPropertyRow, error) {
+	rows, err := q.db.Query(ctx, listSolvencyChecksByProperty, propertyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSolvencyChecksByPropertyRow
+	for rows.Next() {
+		var i ListSolvencyChecksByPropertyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InitiatorOwnerID,
+			&i.CandidateID,
+			&i.Token,
+			&i.PropertyID,
+			&i.Status,
+			&i.CreditSource,
+			&i.ScoreResult,
+			&i.ReportUrl,
+			&i.DocumentsJson,
+			&i.CreatedAt,
+			&i.CandidateEmail,
+			&i.CandidateFirstName,
+			&i.CandidateLastName,
 		); err != nil {
 			return nil, err
 		}
@@ -644,6 +946,81 @@ func (q *Queries) UpdateLastContext(ctx context.Context, arg UpdateLastContextPa
 	return err
 }
 
+const updateProperty = `-- name: UpdateProperty :one
+UPDATE properties
+SET 
+  name = COALESCE(NULLIF($3, ''), name),
+  address = COALESCE(NULLIF($4, ''), address),
+  rental_type = COALESCE(NULLIF($5, '')::property_type, rental_type),
+  details = COALESCE($6, details),
+  rent_amount = COALESCE($7, rent_amount),
+  deposit_amount = COALESCE($8, deposit_amount)
+WHERE id = $1 AND owner_id = $2
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
+`
+
+type UpdatePropertyParams struct {
+	ID            int32          `json:"id"`
+	OwnerID       pgtype.Int4    `json:"owner_id"`
+	Column3       interface{}    `json:"column_3"`
+	Column4       interface{}    `json:"column_4"`
+	Column5       interface{}    `json:"column_5"`
+	Details       []byte         `json:"details"`
+	RentAmount    pgtype.Numeric `json:"rent_amount"`
+	DepositAmount pgtype.Numeric `json:"deposit_amount"`
+}
+
+func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error) {
+	row := q.db.QueryRow(ctx, updateProperty,
+		arg.ID,
+		arg.OwnerID,
+		arg.Column3,
+		arg.Column4,
+		arg.Column5,
+		arg.Details,
+		arg.RentAmount,
+		arg.DepositAmount,
+	)
+	var i Property
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Address,
+		&i.RentalType,
+		&i.Details,
+		&i.RentAmount,
+		&i.DepositAmount,
+		&i.VacancyCredits,
+		&i.IsActive,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateSolvencyCheckResult = `-- name: UpdateSolvencyCheckResult :exec
+UPDATE solvency_checks
+SET status = $2, score_result = $3, report_url = $4
+WHERE id = $1
+`
+
+type UpdateSolvencyCheckResultParams struct {
+	ID          int32              `json:"id"`
+	Status      NullSolvencyStatus `json:"status"`
+	ScoreResult pgtype.Int4        `json:"score_result"`
+	ReportUrl   pgtype.Text        `json:"report_url"`
+}
+
+func (q *Queries) UpdateSolvencyCheckResult(ctx context.Context, arg UpdateSolvencyCheckResultParams) error {
+	_, err := q.db.Exec(ctx, updateSolvencyCheckResult,
+		arg.ID,
+		arg.Status,
+		arg.ScoreResult,
+		arg.ReportUrl,
+	)
+	return err
+}
+
 const updateSubscriptionLimit = `-- name: UpdateSubscriptionLimit :exec
 UPDATE subscriptions
 SET max_properties_limit = max_properties_limit + $2
@@ -657,5 +1034,34 @@ type UpdateSubscriptionLimitParams struct {
 
 func (q *Queries) UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error {
 	_, err := q.db.Exec(ctx, updateSubscriptionLimit, arg.UserID, arg.MaxPropertiesLimit)
+	return err
+}
+
+const updateUserPromotion = `-- name: UpdateUserPromotion :exec
+UPDATE users
+SET password_hash = $2,
+    first_name = $3,
+    last_name = $4,
+    phone_number = $5,
+    is_provisional = FALSE
+WHERE id = $1
+`
+
+type UpdateUserPromotionParams struct {
+	ID           int32       `json:"id"`
+	PasswordHash pgtype.Text `json:"password_hash"`
+	FirstName    pgtype.Text `json:"first_name"`
+	LastName     pgtype.Text `json:"last_name"`
+	PhoneNumber  pgtype.Text `json:"phone_number"`
+}
+
+func (q *Queries) UpdateUserPromotion(ctx context.Context, arg UpdateUserPromotionParams) error {
+	_, err := q.db.Exec(ctx, updateUserPromotion,
+		arg.ID,
+		arg.PasswordHash,
+		arg.FirstName,
+		arg.LastName,
+		arg.PhoneNumber,
+	)
 	return err
 }

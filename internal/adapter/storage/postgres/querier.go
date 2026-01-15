@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	CancelSolvencyCheck(ctx context.Context, id int32) error
+	CleanupProvisionalUsers(ctx context.Context) error
 	CountBookingsByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error)
 	CountLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) (int64, error)
 	CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error)
@@ -25,17 +27,28 @@ type Querier interface {
 	DecreasePropertyCredits(ctx context.Context, id int32) error
 	GetInvitationByToken(ctx context.Context, token string) (LeaseInvitation, error)
 	GetProperty(ctx context.Context, id int32) (Property, error)
+	GetPropertyForUpdate(ctx context.Context, id int32) (Property, error)
+	GetSolvencyCheckByID(ctx context.Context, id int32) (SolvencyCheck, error)
+	GetSolvencyCheckByToken(ctx context.Context, token pgtype.Text) (GetSolvencyCheckByTokenRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserById(ctx context.Context, id int32) (User, error)
 	GetUserCreditBalance(ctx context.Context, userID pgtype.Int4) (int32, error)
+	GetUserCreditBalanceForUpdate(ctx context.Context, userID pgtype.Int4) (int32, error)
+	GetUserForUpdate(ctx context.Context, id int32) (User, error)
 	GetUserSubscription(ctx context.Context, userID pgtype.Int4) (Subscription, error)
 	HasReceivedInitialBonus(ctx context.Context, userID pgtype.Int4) (bool, error)
+	IncreasePropertyCredits(ctx context.Context, id int32) error
 	ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) ([]ListLeasesByTenantRow, error)
 	ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) ([]Property, error)
+	ListSolvencyChecksByOwner(ctx context.Context, initiatorOwnerID pgtype.Int4) ([]ListSolvencyChecksByOwnerRow, error)
+	ListSolvencyChecksByProperty(ctx context.Context, propertyID pgtype.Int4) ([]ListSolvencyChecksByPropertyRow, error)
 	SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error)
 	UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error
 	UpdateLastContext(ctx context.Context, arg UpdateLastContextParams) error
+	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
+	UpdateSolvencyCheckResult(ctx context.Context, arg UpdateSolvencyCheckResultParams) error
 	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error
+	UpdateUserPromotion(ctx context.Context, arg UpdateUserPromotionParams) error
 }
 
 var _ Querier = (*Queries)(nil)

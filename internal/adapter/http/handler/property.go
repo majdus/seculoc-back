@@ -22,9 +22,19 @@ func NewPropertyHandler(svc *service.PropertyService) *PropertyHandler {
 }
 
 type CreatePropertyRequest struct {
+	Name          string                 `json:"name"`
 	Address       string                 `json:"address" binding:"required"`
 	RentalType    string                 `json:"rental_type" binding:"required,oneof=long_term seasonal"`
 	Details       map[string]interface{} `json:"details" binding:"required"`
+	RentAmount    float64                `json:"rent_amount"`
+	DepositAmount float64                `json:"deposit_amount"`
+}
+
+type UpdatePropertyRequest struct {
+	Name          string                 `json:"name"`
+	Address       string                 `json:"address"`
+	RentalType    string                 `json:"rental_type" binding:"omitempty,oneof=long_term seasonal"`
+	Details       map[string]interface{} `json:"details"`
 	RentAmount    float64                `json:"rent_amount"`
 	DepositAmount float64                `json:"deposit_amount"`
 }
@@ -33,6 +43,7 @@ type CreatePropertyRequest struct {
 type PropertyResponse struct {
 	ID             int32                  `json:"id"`
 	OwnerID        int32                  `json:"owner_id"`
+	Name           string                 `json:"name"`
 	Address        string                 `json:"address"`
 	RentalType     string                 `json:"rental_type"`
 	Details        map[string]interface{} `json:"details"`
@@ -71,45 +82,42 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Convert details map to JSON string
-	detailsBytes, err := json.Marshal(req.Details)
+	detailsJSON, err := json.Marshal(req.Details)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid details format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid details json"})
 		return
 	}
 
-	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Address, req.RentalType, string(detailsBytes), req.RentAmount, req.DepositAmount)
+	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.DepositAmount)
 	if err != nil {
-		log.Warn("create property failed", zap.Error(err))
-		// Ideally verify if quota error or system error
+		if err.Error() == "property quota exceeded for current plan" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		log.Error("failed to create property", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Build Response explicitly to handle numeric/float conversion nicely if needed
-	// Or just return prop if postgres struct has json tags (it usually does but pgtype.Numeric needs care).
-	// Postgres sqlc generated structs use pgtype.Numeric. It does NOT marshal to float JSON automatically simple.
-	// We need to map it.
+	var detailsMap map[string]interface{}
+	json.Unmarshal(prop.Details, &detailsMap)
 
-	// For MVP, lets just map manually.
-	rent, _ := prop.RentAmount.Float64Value()
 	deposit, _ := prop.DepositAmount.Float64Value()
+	rent, _ := prop.RentAmount.Float64Value()
 
-	resp := PropertyResponse{
+	c.JSON(http.StatusCreated, PropertyResponse{
 		ID:             prop.ID,
 		OwnerID:        prop.OwnerID.Int32,
+		Name:           prop.Name.String,
 		Address:        prop.Address,
 		RentalType:     string(prop.RentalType),
+		Details:        detailsMap,
 		RentAmount:     rent.Float64,
 		DepositAmount:  deposit.Float64,
 		VacancyCredits: prop.VacancyCredits,
 		IsActive:       prop.IsActive.Bool,
 		CreatedAt:      prop.CreatedAt.Time.String(),
-	}
-	// Details unmarshal
-	json.Unmarshal(prop.Details, &resp.Details)
-
-	c.JSON(http.StatusCreated, resp)
+	})
 }
 
 // List godoc
@@ -149,6 +157,83 @@ func (h *PropertyHandler) List(c *gin.Context) {
 // @Failure      400  {object}  map[string]string
 // @Failure      403  {object}  map[string]string
 // @Router       /properties/{id} [delete]
+// Update godoc
+// @Summary      Update a property
+// @Description  Update details of an existing property
+// @Tags         properties
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Property ID"
+// @Param        request body UpdatePropertyRequest true "Property Update Info"
+// @Success      200  {object}  PropertyResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Router       /properties/{id} [put]
+func (h *PropertyHandler) Update(c *gin.Context) {
+	log := logger.FromContext(c.Request.Context())
+
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid property id"})
+		return
+	}
+
+	var req UpdatePropertyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var detailsJSON []byte
+	if req.Details != nil {
+		b, err := json.Marshal(req.Details)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid details json"})
+			return
+		}
+		detailsJSON = b
+	}
+
+	prop, err := h.svc.UpdateProperty(c.Request.Context(), userID, int32(id), req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.DepositAmount)
+	if err != nil {
+		log.Error("failed to update property", zap.Error(err))
+		if err.Error() == "property not found or access denied" {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var detailsMap map[string]interface{}
+	json.Unmarshal(prop.Details, &detailsMap)
+
+	deposit, _ := prop.DepositAmount.Float64Value()
+	rent, _ := prop.RentAmount.Float64Value()
+
+	c.JSON(http.StatusOK, PropertyResponse{
+		ID:             prop.ID,
+		OwnerID:        prop.OwnerID.Int32,
+		Name:           prop.Name.String,
+		Address:        prop.Address,
+		RentalType:     string(prop.RentalType),
+		Details:        detailsMap,
+		RentAmount:     rent.Float64,
+		DepositAmount:  deposit.Float64,
+		VacancyCredits: prop.VacancyCredits,
+		IsActive:       prop.IsActive.Bool,
+		CreatedAt:      prop.CreatedAt.Time.String(),
+	})
+}
+
 func (h *PropertyHandler) Delete(c *gin.Context) {
 	log := logger.FromContext(c.Request.Context())
 

@@ -16,6 +16,15 @@ UPDATE users
 SET last_context_used = $2
 WHERE id = $1;
 
+-- name: UpdateUserPromotion :exec
+UPDATE users
+SET password_hash = $2,
+    first_name = $3,
+    last_name = $4,
+    phone_number = $5,
+    is_provisional = FALSE
+WHERE id = $1;
+
 -- name: GetUserByEmail :one
 SELECT * FROM users
 WHERE email = $1 LIMIT 1;
@@ -25,21 +34,28 @@ SELECT * FROM users
 WHERE id = $1 LIMIT 1;
 
 -- name: GetProperty :one
-SELECT * FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1;
 
 -- name: CreateProperty :one
 INSERT INTO properties (
-  owner_id,
-  address,
-  rental_type,
-  details,
-  rent_amount,
-  deposit_amount
+  owner_id, name, address, rental_type, details, rent_amount, deposit_amount
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5, $6, $7
 )
-RETURNING *;
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at;
+
+-- name: UpdateProperty :one
+UPDATE properties
+SET 
+  name = COALESCE(NULLIF($3, ''), name),
+  address = COALESCE(NULLIF($4, ''), address),
+  rental_type = COALESCE(NULLIF($5, '')::property_type, rental_type),
+  details = COALESCE($6, details),
+  rent_amount = COALESCE($7, rent_amount),
+  deposit_amount = COALESCE($8, deposit_amount)
+WHERE id = $1 AND owner_id = $2
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at;
 
 -- name: DecreasePropertyCredits :exec
 UPDATE properties
@@ -48,8 +64,8 @@ WHERE id = $1 AND vacancy_credits > 0;
 
 
 -- name: ListPropertiesByOwner :many
-SELECT * FROM properties
-WHERE owner_id = $1 AND is_active = true
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+WHERE owner_id = $1
 ORDER BY created_at DESC;
 
 -- name: CountPropertiesByOwner :one
@@ -73,11 +89,56 @@ WHERE user_id = $1 AND status = 'active';
 
 -- name: CreateSolvencyCheck :one
 INSERT INTO solvency_checks (
-    initiator_owner_id, candidate_email, property_id, status
+    initiator_owner_id, candidate_id, token, property_id, status, credit_source
 ) VALUES (
-    $1, $2, $3, 'pending'
+    $1, $2, $3, $4, 'pending', $5
 )
 RETURNING *;
+
+-- name: GetSolvencyCheckByID :one
+SELECT * FROM solvency_checks
+WHERE id = $1;
+
+-- name: CancelSolvencyCheck :exec
+UPDATE solvency_checks
+SET status = 'cancelled'
+WHERE id = $1;
+
+-- name: GetSolvencyCheckByToken :one
+SELECT 
+    sc.id, sc.initiator_owner_id, sc.candidate_id, sc.token, sc.property_id, sc.status, sc.created_at,
+    u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name,
+    p.address as property_address, p.rent_amount as property_rent_amount, p.name as property_name
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+JOIN properties p ON sc.property_id = p.id
+WHERE sc.token = $1
+ LIMIT 1;
+
+-- name: UpdateSolvencyCheckResult :exec
+UPDATE solvency_checks
+SET status = $2, score_result = $3, report_url = $4
+WHERE id = $1;
+
+-- name: ListSolvencyChecksByOwner :many
+SELECT sc.*, u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name, p.address as property_address
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+JOIN properties p ON sc.property_id = p.id
+WHERE sc.initiator_owner_id = $1
+ORDER BY sc.created_at DESC;
+
+-- name: ListSolvencyChecksByProperty :many
+SELECT sc.*, u.email as candidate_email, u.first_name as candidate_first_name, u.last_name as candidate_last_name
+FROM solvency_checks sc
+JOIN users u ON sc.candidate_id = u.id
+WHERE sc.property_id = $1
+ORDER BY sc.created_at DESC;
+
+-- name: CleanupProvisionalUsers :exec
+DELETE FROM users 
+WHERE is_provisional = TRUE 
+AND created_at < NOW() - INTERVAL '30 days';
 
 -- name: CreateSubscription :one
 INSERT INTO subscriptions (
@@ -95,6 +156,11 @@ INSERT INTO credit_transactions (
 )
 RETURNING *;
 
+-- name: IncreasePropertyCredits :exec
+UPDATE properties
+SET vacancy_credits = vacancy_credits + 1
+WHERE id = $1;
+
 -- name: GetUserSubscription :one
 SELECT * FROM subscriptions
 WHERE user_id = $1 AND status = 'active'
@@ -102,6 +168,18 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: GetUserCreditBalance :one
+SELECT current_balance::int FROM view_user_credit_balance
+WHERE user_id = $1;
+
+-- name: GetPropertyForUpdate :one
+SELECT * FROM properties
+WHERE id = $1 FOR UPDATE;
+
+-- name: GetUserForUpdate :one
+SELECT * FROM users
+WHERE id = $1 FOR UPDATE;
+
+-- name: GetUserCreditBalanceForUpdate :one
 SELECT current_balance::int FROM view_user_credit_balance
 WHERE user_id = $1;
 

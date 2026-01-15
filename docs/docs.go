@@ -45,7 +45,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.LoginRequest"
+                            "$ref": "#/definitions/internal_adapter_http_handler.LoginRequest"
                         }
                     }
                 ],
@@ -53,7 +53,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.LoginResponse"
+                            "$ref": "#/definitions/internal_adapter_http_handler.LoginResponse"
                         }
                     },
                     "400": {
@@ -97,7 +97,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.RegisterRequest"
+                            "$ref": "#/definitions/internal_adapter_http_handler.RegisterRequest"
                         }
                     }
                 ],
@@ -141,7 +141,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.SwitchContextRequest"
+                            "$ref": "#/definitions/internal_adapter_http_handler.SwitchContextRequest"
                         }
                     }
                 ],
@@ -149,7 +149,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.LoginResponse"
+                            "$ref": "#/definitions/internal_adapter_http_handler.LoginResponse"
                         }
                     },
                     "400": {
@@ -184,7 +184,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.InviteTenantRequest"
+                            "$ref": "#/definitions/internal_adapter_http_handler.InviteTenantRequest"
                         }
                     }
                 ],
@@ -230,7 +230,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.AcceptInvitationRequest"
+                            "$ref": "#/definitions/internal_adapter_http_handler.AcceptInvitationRequest"
                         }
                     }
                 ],
@@ -282,7 +282,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/service.InvitationDetailsDTO"
+                            "$ref": "#/definitions/seculoc-back_internal_core_service.InvitationDetailsDTO"
                         }
                     },
                     "400": {
@@ -321,7 +321,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/service.LeaseDTO"
+                                "$ref": "#/definitions/seculoc-back_internal_core_service.LeaseDTO"
                             }
                         }
                     },
@@ -410,7 +410,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handler.PropertyResponse"
+                            "$ref": "#/definitions/internal_adapter_http_handler.PropertyResponse"
                         }
                     },
                     "400": {
@@ -435,23 +435,29 @@ const docTemplate = `{
             }
         },
         "/properties/{id}": {
-            "delete": {
+            "put": {
                 "security": [
+                    {
+                        "BearerAuth": []
+                    },
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Soft delete a property belonging to the authenticated user",
+                "description": "Soft delete a property belonging to the authenticated user\nUpdate details of an existing property",
                 "consumes": [
+                    "application/json",
                     "application/json"
                 ],
                 "produces": [
+                    "application/json",
                     "application/json"
                 ],
                 "tags": [
+                    "properties",
                     "properties"
                 ],
-                "summary": "Delete a property",
+                "summary": "Update a property",
                 "parameters": [
                     {
                         "type": "integer",
@@ -459,9 +465,109 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Property ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Property Update Info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.UpdatePropertyRequest"
+                        }
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.PropertyResponse"
+                        }
+                    },
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soft delete a property belonging to the authenticated user\nUpdate details of an existing property",
+                "consumes": [
+                    "application/json",
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json",
+                    "application/json"
+                ],
+                "tags": [
+                    "properties",
+                    "properties"
+                ],
+                "summary": "Update a property",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Property ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Property ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Property Update Info",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.UpdatePropertyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.PropertyResponse"
+                        }
+                    },
                     "204": {
                         "description": "No Content"
                     },
@@ -493,7 +599,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Consume credit to run solvency check on candidate",
+                "description": "Consume credit to run solvency check on candidate and send invitation email",
                 "consumes": [
                     "application/json"
                 ],
@@ -511,8 +617,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_adapter_http_handler.CreateCheckRequest"
                         }
                     }
                 ],
@@ -520,8 +625,98 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.SolvencyCheckResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/solvency/check/{id}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancel a pending check and refund credit to property or global wallet",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "solvency"
+                ],
+                "summary": "Cancel Solvency Check",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Check ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/solvency/checks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all solvency checks for the current owner, optionally filtered by property",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "solvency"
+                ],
+                "summary": "List Solvency Checks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Property ID filter",
+                        "name": "property_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_adapter_http_handler.SolvencyCheckResponse"
+                            }
                         }
                     },
                     "400": {
@@ -586,6 +781,97 @@ const docTemplate = `{
                 }
             }
         },
+        "/solvency/public/check/{token}": {
+            "get": {
+                "description": "Allows candidate to see the solvency check request",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "solvency"
+                ],
+                "summary": "Get Solvency Check Details (Public)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Check Token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.PublicSolvencyCheckResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/solvency/public/check/{token}/callback": {
+            "post": {
+                "description": "Endpoint for mocking Open Banking data callback",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "solvency"
+                ],
+                "summary": "Open Banking Callback (Public)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Check Token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Transaction Data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_adapter_http_handler.OpenBankingCallback"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/subscriptions": {
             "post": {
                 "security": [
@@ -620,7 +906,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.SubscriptionResponse"
+                            "$ref": "#/definitions/internal_adapter_http_handler.SubscriptionResponse"
                         }
                     },
                     "400": {
@@ -687,7 +973,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "handler.AcceptInvitationRequest": {
+        "internal_adapter_http_handler.AcceptInvitationRequest": {
             "type": "object",
             "required": [
                 "token"
@@ -698,7 +984,31 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.InviteTenantRequest": {
+        "internal_adapter_http_handler.CreateCheckRequest": {
+            "type": "object",
+            "required": [
+                "candidate_email",
+                "property_id"
+            ],
+            "properties": {
+                "candidate_email": {
+                    "type": "string"
+                },
+                "candidate_first_name": {
+                    "type": "string"
+                },
+                "candidate_last_name": {
+                    "type": "string"
+                },
+                "candidate_phone": {
+                    "type": "string"
+                },
+                "property_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_adapter_http_handler.InviteTenantRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -713,7 +1023,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.LoginRequest": {
+        "internal_adapter_http_handler.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -728,14 +1038,14 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.LoginResponse": {
+        "internal_adapter_http_handler.LoginResponse": {
             "type": "object",
             "properties": {
                 "capabilities": {
-                    "$ref": "#/definitions/service.Capabilities"
+                    "$ref": "#/definitions/seculoc-back_internal_core_service.Capabilities"
                 },
                 "current_context": {
-                    "$ref": "#/definitions/service.UserContext"
+                    "$ref": "#/definitions/seculoc-back_internal_core_service.UserContext"
                 },
                 "token": {
                     "type": "string"
@@ -759,7 +1069,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "owner_profile": {
-                            "$ref": "#/definitions/service.UserProfile"
+                            "$ref": "#/definitions/seculoc-back_internal_core_service.UserProfile"
                         },
                         "phone": {
                             "type": "string"
@@ -771,7 +1081,18 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.PropertyResponse": {
+        "internal_adapter_http_handler.OpenBankingCallback": {
+            "type": "object",
+            "properties": {
+                "transactions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/seculoc-back_internal_core_service.TransactionData"
+                    }
+                }
+            }
+        },
+        "internal_adapter_http_handler.PropertyResponse": {
             "type": "object",
             "properties": {
                 "address": {
@@ -793,6 +1114,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "name": {
+                    "type": "string"
+                },
                 "owner_id": {
                     "type": "integer"
                 },
@@ -807,7 +1131,36 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.RegisterRequest": {
+        "internal_adapter_http_handler.PublicSolvencyCheckResponse": {
+            "type": "object",
+            "properties": {
+                "candidate_email": {
+                    "type": "string"
+                },
+                "candidate_first_name": {
+                    "type": "string"
+                },
+                "candidate_last_name": {
+                    "type": "string"
+                },
+                "property_address": {
+                    "type": "string"
+                },
+                "property_id": {
+                    "type": "integer"
+                },
+                "property_name": {
+                    "type": "string"
+                },
+                "rent_amount": {
+                    "type": "number"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_adapter_http_handler.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -839,7 +1192,48 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SubscriptionResponse": {
+        "internal_adapter_http_handler.SolvencyCheckResponse": {
+            "type": "object",
+            "properties": {
+                "candidate_email": {
+                    "type": "string"
+                },
+                "candidate_first_name": {
+                    "type": "string"
+                },
+                "candidate_last_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "property_address": {
+                    "type": "string"
+                },
+                "property_id": {
+                    "type": "integer"
+                },
+                "report_url": {
+                    "type": "string"
+                },
+                "score_result": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "verification_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_adapter_http_handler.SubscriptionResponse": {
             "type": "object",
             "properties": {
                 "data": {
@@ -864,7 +1258,7 @@ const docTemplate = `{
                                     "type": "string"
                                 },
                                 "owner_profile": {
-                                    "$ref": "#/definitions/service.UserProfile"
+                                    "$ref": "#/definitions/seculoc-back_internal_core_service.UserProfile"
                                 },
                                 "phone": {
                                     "type": "string"
@@ -881,7 +1275,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.SwitchContextRequest": {
+        "internal_adapter_http_handler.SwitchContextRequest": {
             "type": "object",
             "required": [
                 "target_context"
@@ -896,7 +1290,35 @@ const docTemplate = `{
                 }
             }
         },
-        "service.Capabilities": {
+        "internal_adapter_http_handler.UpdatePropertyRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "deposit_amount": {
+                    "type": "number"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rent_amount": {
+                    "type": "number"
+                },
+                "rental_type": {
+                    "type": "string",
+                    "enum": [
+                        "long_term",
+                        "seasonal"
+                    ]
+                }
+            }
+        },
+        "seculoc-back_internal_core_service.Capabilities": {
             "type": "object",
             "properties": {
                 "can_act_as_owner": {
@@ -907,7 +1329,7 @@ const docTemplate = `{
                 }
             }
         },
-        "service.InvitationDetailsDTO": {
+        "seculoc-back_internal_core_service.InvitationDetailsDTO": {
             "type": "object",
             "properties": {
                 "deposit_amount": {
@@ -927,7 +1349,7 @@ const docTemplate = `{
                 }
             }
         },
-        "service.LeaseDTO": {
+        "seculoc-back_internal_core_service.LeaseDTO": {
             "type": "object",
             "properties": {
                 "contract_url": {
@@ -962,7 +1384,7 @@ const docTemplate = `{
                 }
             }
         },
-        "service.SubscriptionDTO": {
+        "seculoc-back_internal_core_service.SubscriptionDTO": {
             "type": "object",
             "properties": {
                 "end_date": {
@@ -985,7 +1407,21 @@ const docTemplate = `{
                 }
             }
         },
-        "service.UserContext": {
+        "seculoc-back_internal_core_service.TransactionData": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                }
+            }
+        },
+        "seculoc-back_internal_core_service.UserContext": {
             "type": "string",
             "enum": [
                 "owner",
@@ -998,14 +1434,14 @@ const docTemplate = `{
                 "ContextNone"
             ]
         },
-        "service.UserProfile": {
+        "seculoc-back_internal_core_service.UserProfile": {
             "type": "object",
             "properties": {
                 "credit_balance": {
                     "type": "integer"
                 },
                 "subscription": {
-                    "$ref": "#/definitions/service.SubscriptionDTO"
+                    "$ref": "#/definitions/seculoc-back_internal_core_service.SubscriptionDTO"
                 }
             }
         }

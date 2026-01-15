@@ -70,13 +70,17 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 	var user postgres.User
 
 	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
-		// 1. Check uniqueness
-		_, err := q.GetUserByEmail(ctx, email)
+		// 1. Check uniqueness or provisional status
+		existingUser, err := q.GetUserByEmail(ctx, email)
 		if err == nil {
-			log.Warn("registration failed: email already exists", zap.String("email", email))
-			return fmt.Errorf("user with email %s already exists", email)
-		}
-		if err != pgx.ErrNoRows {
+			// If user exists, they must be provisional to proceed with registration
+			if !existingUser.IsProvisional.Bool {
+				log.Warn("registration failed: email already exists and not provisional", zap.String("email", email))
+				return fmt.Errorf("user with email %s already exists", email)
+			}
+			// Promotion case: we will update this user instead of creating a new one
+			log.Info("promoting provisional user", zap.String("email", email))
+		} else if err != pgx.ErrNoRows {
 			log.Error("registration check failed", zap.Error(err))
 			return err
 		}
@@ -85,20 +89,36 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 		hashedPassword := "hashed_" + password
 		initialContext := "owner" // Default
 
-		// 3. Create User
-		params := postgres.CreateUserParams{
-			Email:           email,
-			PasswordHash:    hashedPassword,
-			FirstName:       pgtype.Text{String: firstName, Valid: firstName != ""},
-			LastName:        pgtype.Text{String: lastName, Valid: lastName != ""},
-			PhoneNumber:     pgtype.Text{String: phone, Valid: phone != ""},
-			LastContextUsed: pgtype.Text{String: initialContext, Valid: true},
-		}
-
-		user, err = q.CreateUser(ctx, params)
-		if err != nil {
-			log.Error("registration failed during creation", zap.Error(err))
-			return err
+		// 3. Create or Promote User
+		if existingUser.ID != 0 {
+			// Update provisional user
+			// We need a query to "promote" the user. Let's assume UpdateUserPromotion exists or we use UpdateLastContext + something else.
+			// Actually, let's add UpdateUserPromotion to query.sql too.
+			err = q.UpdateUserPromotion(ctx, postgres.UpdateUserPromotionParams{
+				ID:           existingUser.ID,
+				PasswordHash: pgtype.Text{String: hashedPassword, Valid: true},
+				FirstName:    pgtype.Text{String: firstName, Valid: firstName != ""},
+				LastName:     pgtype.Text{String: lastName, Valid: lastName != ""},
+				PhoneNumber:  pgtype.Text{String: phone, Valid: phone != ""},
+			})
+			if err != nil {
+				return err
+			}
+			user, _ = q.GetUserById(ctx, existingUser.ID)
+		} else {
+			params := postgres.CreateUserParams{
+				Email:           email,
+				PasswordHash:    pgtype.Text{String: hashedPassword, Valid: true},
+				FirstName:       pgtype.Text{String: firstName, Valid: firstName != ""},
+				LastName:        pgtype.Text{String: lastName, Valid: lastName != ""},
+				PhoneNumber:     pgtype.Text{String: phone, Valid: phone != ""},
+				LastContextUsed: pgtype.Text{String: initialContext, Valid: true},
+			}
+			user, err = q.CreateUser(ctx, params)
+			if err != nil {
+				log.Error("registration failed during creation", zap.Error(err))
+				return err
+			}
 		}
 
 		// 4. Handle Invitation (if present)
@@ -205,7 +225,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*AuthR
 
 	// 2. Validate Password
 	hashedInput := "hashed_" + password
-	if user.PasswordHash != hashedInput {
+	if user.PasswordHash.String != hashedInput {
 		log.Warn("login failed: invalid password", zap.String("email", email))
 		return nil, fmt.Errorf("invalid credentials")
 	}

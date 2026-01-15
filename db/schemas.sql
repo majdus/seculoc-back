@@ -6,7 +6,7 @@ CREATE TYPE user_role AS ENUM ('admin', 'user'); -- Rôle système. Le métier (
 CREATE TYPE property_type AS ENUM ('long_term', 'seasonal'); -- [cite: 5]
 CREATE TYPE sub_plan AS ENUM ('discovery', 'serenity', 'premium'); -- [cite: 31, 37, 46]
 CREATE TYPE billing_freq AS ENUM ('monthly', 'yearly'); -- [cite: 39]
-CREATE TYPE solvency_status AS ENUM ('pending', 'approved', 'rejected', 'insufficient_docs');
+CREATE TYPE solvency_status AS ENUM ('pending', 'approved', 'rejected', 'insufficient_docs', 'cancelled');
 CREATE TYPE escrow_status AS ENUM ('held', 'released', 'disputed', 'refunded'); -- [cite: 27, 58]
 
 -- =============================================
@@ -16,12 +16,13 @@ CREATE TYPE escrow_status AS ENUM ('held', 'released', 'disputed', 'refunded'); 
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255), -- Nullable for provisional accounts
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     phone_number VARCHAR(20),
     is_verified BOOLEAN DEFAULT FALSE, -- KYC de l'utilisateur lui-même
     stripe_customer_id VARCHAR(100), -- Pour les prélèvements abonnements/packs
+    is_provisional BOOLEAN DEFAULT TRUE,
     last_context_used VARCHAR(50) DEFAULT 'owner', -- 'owner' or 'tenant'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,6 +72,7 @@ GROUP BY user_id;
 CREATE TABLE properties (
     id SERIAL PRIMARY KEY,
     owner_id INT REFERENCES users(id),
+    name TEXT, -- Titre de l'annonce (ex: "Joli Studio")
     address TEXT NOT NULL,
     rental_type property_type NOT NULL, -- Longue durée ou Saisonnier [cite: 5]
     details JSONB, -- Surface, nbr pièces, description
@@ -88,9 +90,11 @@ CREATE TABLE properties (
 CREATE TABLE solvency_checks (
     id SERIAL PRIMARY KEY,
     initiator_owner_id INT REFERENCES users(id), -- Celui qui consomme le crédit
-    candidate_email VARCHAR(255) NOT NULL, -- Le candidat n'est pas forcément encore inscrit
+    candidate_id INT REFERENCES users(id), -- Lien vers le compte (provisoire ou non)
+    token VARCHAR(255) UNIQUE,
     property_id INT REFERENCES properties(id),
     status solvency_status DEFAULT 'pending',
+    credit_source VARCHAR(20), -- 'property' or 'global'
     score_result INT, -- Résultat de l'algo
     report_url VARCHAR(255), -- Lien vers le PDF généré
     documents_json JSONB, -- Liens vers fiches de paie stockées sécurisées

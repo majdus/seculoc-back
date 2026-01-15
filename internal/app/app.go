@@ -35,7 +35,7 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 	userService := service.NewUserService(txManager, log, emailSender, frontendURL)
 	propService := service.NewPropertyService(txManager, log)
 	subService := service.NewSubscriptionService(txManager, log)
-	solvService := service.NewSolvencyService(txManager, log)
+	solvService := service.NewSolvencyService(txManager, emailSender, log)
 	leaseService := service.NewLeaseService(txManager, log)
 
 	// 3. Adapters (Handlers)
@@ -60,6 +60,8 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 	api := r.Group("/api/v1")
 	{
 		api.GET("/invitations/:token", invHandler.GetInvitation)
+		api.GET("/solvency/public/check/:token", solvHandler.GetCheckByToken)
+		api.POST("/solvency/public/check/:token/callback", solvHandler.ProcessCallback)
 
 		authGroup := api.Group("/auth")
 		{
@@ -75,6 +77,7 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 			// Properties
 			protected.POST("/properties", propHandler.Create)
 			protected.GET("/properties", propHandler.List)
+			protected.PUT("/properties/:id", propHandler.Update)
 			protected.DELETE("/properties/:id", propHandler.Delete)
 
 			// Leases
@@ -86,6 +89,8 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 
 			// Solvency
 			protected.POST("/solvency/check", solvHandler.CreateCheck)
+			protected.POST("/solvency/check/:id/cancel", solvHandler.CancelCheck)
+			protected.GET("/solvency/checks", solvHandler.ListChecks)
 			protected.POST("/solvency/credits", solvHandler.BuyCredits)
 
 			// Invitations

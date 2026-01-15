@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -97,4 +98,8 @@ func TestListLeases_DBError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, leases)
+}
+
+func FactoryBigInt(v int64) *big.Int {
+	return big.NewInt(v)
 }

@@ -22,7 +22,7 @@ sqlc:
 	$(HOME)/go/bin/sqlc generate
 
 swagger:
-	$(HOME)/go/bin/swag init -g cmd/server/main.go
+	$(HOME)/go/bin/swag init -g cmd/server/main.go -o docs --parseDependency --parseInternal
 
 # Docker & Database
 docker-up:

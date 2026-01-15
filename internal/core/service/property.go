@@ -25,7 +25,7 @@ func NewPropertyService(txManager TxManager, l *zap.Logger) *PropertyService {
 	}
 }
 
-func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, address string, rentalType string, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
+func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, name, address string, rentalType string, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
 	log := logger.FromContext(ctx)
 	var prop postgres.Property
 
@@ -61,21 +61,25 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 				return err
 			}
 
-			if currentCount >= int64(limit) {
+			if int32(currentCount) >= limit {
 				log.Warn("quota exceeded", zap.Int("limit", int(limit)), zap.Int64("current", currentCount))
 				return fmt.Errorf("property quota exceeded for current plan")
 			}
 		}
 
-		// 4. Create
-		rentNumeric := pgtype.Numeric{}
-		rentNumeric.Scan(fmt.Sprintf("%f", rentAmount)) // Simplistic scan, better to use string if accurate
-
-		depositNumeric := pgtype.Numeric{}
+		// 4. Create Property
+		var rentNumeric, depositNumeric pgtype.Numeric
+		rentNumeric.Scan(fmt.Sprintf("%f", rentAmount))
 		depositNumeric.Scan(fmt.Sprintf("%f", depositAmount))
 
-		prop, err = q.CreateProperty(ctx, postgres.CreatePropertyParams{
+		var nameText pgtype.Text
+		if name != "" {
+			nameText = pgtype.Text{String: name, Valid: true}
+		}
+
+		p, err := q.CreateProperty(ctx, postgres.CreatePropertyParams{
 			OwnerID:       pgtype.Int4{Int32: userID, Valid: true},
+			Name:          nameText,
 			Address:       address,
 			RentalType:    pType,
 			Details:       []byte(detailsJSON),
@@ -85,8 +89,11 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, addr
 		if err != nil {
 			return err
 		}
+		prop = p
+		log.Info("property created", zap.Int32("property_id", p.ID), zap.Int32("user_id", userID))
 
-		// 5. Initial Bonus (Discovery Plan + Long Term + First Time)
+		// 5. Initial Bonus for first property
+		// Check if it's the very first property
 		if sub.PlanType == postgres.SubPlanDiscovery && pType == postgres.PropertyTypeLongTerm {
 			hasBonus, err := q.HasReceivedInitialBonus(ctx, pgtype.Int4{Int32: userID, Valid: true})
 			if err != nil {
@@ -129,6 +136,66 @@ func (s *PropertyService) ListProperties(ctx context.Context, userID int32) ([]p
 	})
 	return props, err
 
+}
+
+func (s *PropertyService) UpdateProperty(ctx context.Context, userID int32, propertyID int32, name, address, rentalType, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
+	log := logger.FromContext(ctx)
+	var prop postgres.Property
+
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+		// Prepare Params
+		var rentNumeric, depositNumeric pgtype.Numeric
+		if rentAmount > 0 {
+			rentNumeric.Scan(fmt.Sprintf("%f", rentAmount))
+		} else {
+			rentNumeric.Valid = false
+		}
+		if depositAmount > 0 {
+			depositNumeric.Scan(fmt.Sprintf("%f", depositAmount))
+		} else {
+			depositNumeric.Valid = false
+		}
+
+		var pType pgtype.Text
+		if rentalType != "" {
+			if rentalType != "long_term" && rentalType != "seasonal" {
+				return fmt.Errorf("invalid rental type: %s", rentalType)
+			}
+			pType = pgtype.Text{String: rentalType, Valid: true}
+		}
+
+		var detailsBytes []byte
+		if detailsJSON != "" && detailsJSON != "null" {
+			detailsBytes = []byte(detailsJSON)
+		}
+
+		p, err := q.UpdateProperty(ctx, postgres.UpdatePropertyParams{
+			ID:            propertyID,
+			OwnerID:       pgtype.Int4{Int32: userID, Valid: true},
+			Column3:       pgtype.Text{String: name, Valid: name != ""},
+			Column4:       pgtype.Text{String: address, Valid: address != ""},
+			Column5:       pType,
+			Details:       detailsBytes,
+			RentAmount:    rentNumeric,
+			DepositAmount: depositNumeric,
+		})
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("property not found or access denied")
+			}
+			return err
+		}
+		prop = p
+		return nil
+	})
+
+	if err != nil {
+		log.Warn("update property failed", zap.Error(err), zap.Int32("id", propertyID))
+		return nil, err
+	}
+
+	log.Info("property updated", zap.Int32("property_id", prop.ID))
+	return &prop, nil
 }
 
 func (s *PropertyService) DeleteProperty(ctx context.Context, userID int32, propertyID int32) error {

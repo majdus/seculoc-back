@@ -64,7 +64,7 @@ func TestCreateProperty_Success(t *testing.T) {
 	})).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, 1, "123 Main St", "long_term", "{}", 1000, 2000)
+	prop, err := svc.CreateProperty(ctx, userID, "", "123 Main St", "long_term", "{}", 1000, 2000)
 
 	// Assert
 	assert.NoError(t, err)
@@ -103,7 +103,7 @@ func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
 	mockQuerier.On("CreateProperty", mock.Anything, mock.Anything).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "Holiday Home", "seasonal", "{}", 0, 0)
+	prop, err := svc.CreateProperty(ctx, userID, "", "Holiday Home", "seasonal", "{}", 0, 0)
 
 	// Assert
 	assert.NoError(t, err)
@@ -143,7 +143,7 @@ func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	})).Return(int64(1), nil)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}", 0, 0)
+	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.Error(t, err)
@@ -174,7 +174,7 @@ func TestCreateProperty_NoSubscription(t *testing.T) {
 	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(postgres.Subscription{}, pgx.ErrNoRows)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "123 Street", "long_term", "{}", 0, 0)
+	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0)
 
 	// Assert
 	assert.Error(t, err)
