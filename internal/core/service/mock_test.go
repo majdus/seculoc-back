@@ -206,6 +206,11 @@ func (m *MockQuerier) UpdateLastContext(ctx context.Context, arg postgres.Update
 	return args.Error(0)
 }
 
+func (m *MockQuerier) UpdateProperty(ctx context.Context, arg postgres.UpdatePropertyParams) (postgres.Property, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.Property), args.Error(1)
+}
+
 func (m *MockQuerier) UpdateSolvencyCheckResult(ctx context.Context, arg postgres.UpdateSolvencyCheckResultParams) error {
 	args := m.Called(ctx, arg)
 	return args.Error(0)
@@ -218,5 +223,16 @@ func (m *MockQuerier) UpdateSubscriptionLimit(ctx context.Context, arg postgres.
 
 func (m *MockQuerier) UpdateUserPromotion(ctx context.Context, arg postgres.UpdateUserPromotionParams) error {
 	args := m.Called(ctx, arg)
+	return args.Error(0)
+}
+	return args.Error(0)
+}
+
+type MockLeaseService struct {
+	mock.Mock
+}
+
+func (m *MockLeaseService) GenerateAndSave(ctx context.Context, leaseID int32) error {
+	args := m.Called(ctx, leaseID)
 	return args.Error(0)
 }

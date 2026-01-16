@@ -346,6 +346,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/leases/{id}/download": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generate and download the lease contract (HTML/PDF)",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "leases"
+                ],
+                "summary": "Download lease document",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Lease ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/properties": {
             "get": {
                 "security": [
@@ -401,8 +453,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_adapter_http_handler.CreatePropertyRequest"
                         }
                     }
                 ],
@@ -1008,6 +1059,48 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_adapter_http_handler.CreatePropertyRequest": {
+            "type": "object",
+            "required": [
+                "address",
+                "details",
+                "rental_type"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "deposit_amount": {
+                    "type": "number"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "is_furnished": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rent_amount": {
+                    "type": "number"
+                },
+                "rent_charges_amount": {
+                    "type": "number"
+                },
+                "rental_type": {
+                    "type": "string",
+                    "enum": [
+                        "long_term",
+                        "seasonal"
+                    ]
+                },
+                "seasonal_price_per_night": {
+                    "type": "number"
+                }
+            }
+        },
         "internal_adapter_http_handler.InviteTenantRequest": {
             "type": "object",
             "required": [
@@ -1114,6 +1207,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "is_furnished": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -1123,8 +1219,14 @@ const docTemplate = `{
                 "rent_amount": {
                     "type": "number"
                 },
+                "rent_charges_amount": {
+                    "type": "number"
+                },
                 "rental_type": {
                     "type": "string"
+                },
+                "seasonal_price_per_night": {
+                    "type": "number"
                 },
                 "vacancy_credits": {
                     "type": "integer"
@@ -1303,10 +1405,16 @@ const docTemplate = `{
                     "type": "object",
                     "additionalProperties": true
                 },
+                "is_furnished": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
                 "rent_amount": {
+                    "type": "number"
+                },
+                "rent_charges_amount": {
                     "type": "number"
                 },
                 "rental_type": {
@@ -1315,6 +1423,9 @@ const docTemplate = `{
                         "long_term",
                         "seasonal"
                     ]
+                },
+                "seasonal_price_per_night": {
+                    "type": "number"
                 }
             }
         },

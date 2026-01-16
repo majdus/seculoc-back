@@ -63,6 +63,12 @@ func TestMain(m *testing.M) {
 	// 2. Setup App Config
 	viper.Set("JWT_SECRET", "test_secret_for_e2e")
 	viper.Set("ENV", "test")
+
+	// Create temp storage for E2E
+	storageDir, _ := os.MkdirTemp("", "e2e_storage")
+	defer os.RemoveAll(storageDir)
+	viper.Set("STORAGE_DIR", storageDir)
+
 	logger.Init("test")
 	log := logger.Get()
 
@@ -163,6 +169,7 @@ func TestE2E_FullUserJourney(t *testing.T) {
 	// 4. Create Property - Seasonal (Unlimited)
 	w = performRequest(router, "POST", "/api/v1/properties", token, map[string]interface{}{
 		"address": "Seasonal 1", "rental_type": "seasonal", "details": map[string]string{},
+		"rent_amount": 1000, "rent_charges_amount": 100, "is_furnished": true, "seasonal_price_per_night": 50,
 	})
 	require.Equal(t, http.StatusCreated, w.Code)
 

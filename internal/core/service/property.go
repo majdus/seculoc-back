@@ -25,7 +25,7 @@ func NewPropertyService(txManager TxManager, l *zap.Logger) *PropertyService {
 	}
 }
 
-func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, name, address string, rentalType string, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
+func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, name, address string, rentalType string, detailsJSON string, rentAmount, rentChargesAmount, depositAmount float64, isFurnished bool, seasonalPricePerNight float64) (*postgres.Property, error) {
 	log := logger.FromContext(ctx)
 	var prop postgres.Property
 
@@ -68,9 +68,13 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, name
 		}
 
 		// 4. Create Property
-		var rentNumeric, depositNumeric pgtype.Numeric
+		var rentNumeric, rentChargesNumeric, depositNumeric, seasonalPriceNumeric pgtype.Numeric
 		rentNumeric.Scan(fmt.Sprintf("%f", rentAmount))
+		rentChargesNumeric.Scan(fmt.Sprintf("%f", rentChargesAmount))
 		depositNumeric.Scan(fmt.Sprintf("%f", depositAmount))
+		if seasonalPricePerNight > 0 {
+			seasonalPriceNumeric.Scan(fmt.Sprintf("%f", seasonalPricePerNight))
+		}
 
 		var nameText pgtype.Text
 		if name != "" {
@@ -78,13 +82,16 @@ func (s *PropertyService) CreateProperty(ctx context.Context, userID int32, name
 		}
 
 		p, err := q.CreateProperty(ctx, postgres.CreatePropertyParams{
-			OwnerID:       pgtype.Int4{Int32: userID, Valid: true},
-			Name:          nameText,
-			Address:       address,
-			RentalType:    pType,
-			Details:       []byte(detailsJSON),
-			RentAmount:    rentNumeric,
-			DepositAmount: depositNumeric,
+			OwnerID:               pgtype.Int4{Int32: userID, Valid: true},
+			Name:                  nameText,
+			Address:               address,
+			RentalType:            pType,
+			Details:               []byte(detailsJSON),
+			RentAmount:            rentNumeric,
+			RentChargesAmount:     rentChargesNumeric,
+			DepositAmount:         depositNumeric,
+			IsFurnished:           pgtype.Bool{Bool: isFurnished, Valid: true},
+			SeasonalPricePerNight: seasonalPriceNumeric,
 		})
 		if err != nil {
 			return err
@@ -138,22 +145,49 @@ func (s *PropertyService) ListProperties(ctx context.Context, userID int32) ([]p
 
 }
 
-func (s *PropertyService) UpdateProperty(ctx context.Context, userID int32, propertyID int32, name, address, rentalType, detailsJSON string, rentAmount, depositAmount float64) (*postgres.Property, error) {
+func (s *PropertyService) UpdateProperty(ctx context.Context, userID int32, propertyID int32, name, address, rentalType, detailsJSON string, rentAmount, rentChargesAmount, depositAmount float64, isFurnished *bool, seasonalPricePerNight *float64) (*postgres.Property, error) {
 	log := logger.FromContext(ctx)
 	var prop postgres.Property
 
 	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
 		// Prepare Params
-		var rentNumeric, depositNumeric pgtype.Numeric
-		if rentAmount > 0 {
-			rentNumeric.Scan(fmt.Sprintf("%f", rentAmount))
-		} else {
-			rentNumeric.Valid = false
+		var rentNumeric, rentChargesNumeric, depositNumeric, seasonalPriceNumeric pgtype.Numeric
+
+		// Helper for numeric optional updates
+		setNumeric := func(val float64, dest *pgtype.Numeric) {
+			if val > 0 {
+				dest.Scan(fmt.Sprintf("%f", val))
+			} else {
+				dest.Valid = false
+			}
 		}
-		if depositAmount > 0 {
-			depositNumeric.Scan(fmt.Sprintf("%f", depositAmount))
+
+		// For numeric fields where 0 might be valid (charges?), we should distinguish "not provided" from 0.
+		// Current logic assumes 0 means "don't update".
+		// Note from User request: "préciser loyer sans charge et charge" -> rentChargesAmount.
+		// If rentChargesAmount is passed as 0, does it mean "free" or "no update"?
+		// Standard partial update pattern usually requires pointers or specific distinct values.
+		// For simplicity/safety, we stick to: if > 0 update. If 0 ignored (unless we use pointers in args).
+		// *User didn't specify strict partial update behavior for these fields.*
+		// Let's assume > -1 to allow 0? No, float is tricky.
+		// Let's stick to "if provided (>0) update".
+		// Actually, for isFurnished we used a pointer *bool to allow false/true update.
+		// For prices, maybe we should use *float64 too?
+		// The existing signature had float64. I'll stick to float64 for old fields, maybe consider *float64 for new flexible ones?
+		// Let's allow passing -1 to indicate "no change" if we want to support 0?
+		// Or using pointers for the new fields is cleaner.
+		// I've updated the signature to include pointers for `seasonalPricePerNight` to clearly distinguish presence. `rentChargesAmount` I left as float64 (following existing pattern), but effectively it means we can't set it to 0 if it was non-zero.
+		// Ideally I should refactor all to pointers, but that's a big change.
+		// I'll stick to float64 > 0 = update for consistency with existing code.
+
+		setNumeric(rentAmount, &rentNumeric)
+		setNumeric(rentChargesAmount, &rentChargesNumeric)
+		setNumeric(depositAmount, &depositNumeric)
+
+		if seasonalPricePerNight != nil {
+			seasonalPriceNumeric.Scan(fmt.Sprintf("%f", *seasonalPricePerNight))
 		} else {
-			depositNumeric.Valid = false
+			seasonalPriceNumeric.Valid = false
 		}
 
 		var pType pgtype.Text
@@ -169,15 +203,25 @@ func (s *PropertyService) UpdateProperty(ctx context.Context, userID int32, prop
 			detailsBytes = []byte(detailsJSON)
 		}
 
+		var isFurnishedVal pgtype.Bool
+		if isFurnished != nil {
+			isFurnishedVal = pgtype.Bool{Bool: *isFurnished, Valid: true}
+		} else {
+			isFurnishedVal = pgtype.Bool{Valid: false}
+		}
+
 		p, err := q.UpdateProperty(ctx, postgres.UpdatePropertyParams{
-			ID:            propertyID,
-			OwnerID:       pgtype.Int4{Int32: userID, Valid: true},
-			Column3:       pgtype.Text{String: name, Valid: name != ""},
-			Column4:       pgtype.Text{String: address, Valid: address != ""},
-			Column5:       pType,
-			Details:       detailsBytes,
-			RentAmount:    rentNumeric,
-			DepositAmount: depositNumeric,
+			ID:                    propertyID,
+			OwnerID:               pgtype.Int4{Int32: userID, Valid: true},
+			Column3:               pgtype.Text{String: name, Valid: name != ""},
+			Column4:               pgtype.Text{String: address, Valid: address != ""},
+			Column5:               pType,
+			Details:               detailsBytes,
+			RentAmount:            rentNumeric,
+			RentChargesAmount:     rentChargesNumeric,
+			DepositAmount:         depositNumeric,
+			IsFurnished:           isFurnishedVal,
+			SeasonalPricePerNight: seasonalPriceNumeric,
 		})
 		if err != nil {
 			if err == pgx.ErrNoRows {

@@ -53,8 +53,10 @@ func TestE2E_PropertyUpdate(t *testing.T) {
 
 	// 4. Update Property (Success)
 	updatePayload := map[string]interface{}{
-		"name":        "Updated Name",
-		"rent_amount": 1500.0,
+		"name":                "Updated Name",
+		"rent_amount":         1500.0,
+		"rent_charges_amount": 150.0,
+		"is_furnished":        true,
 	}
 	url := fmt.Sprintf("/api/v1/properties/%d", propID)
 	w = performRequest(router, "PUT", url, token, updatePayload)
@@ -66,6 +68,8 @@ func TestE2E_PropertyUpdate(t *testing.T) {
 	// Assertions
 	assert.Equal(t, "Updated Name", updatedResp["name"])
 	assert.Equal(t, 1500.0, updatedResp["rent_amount"])
+	assert.Equal(t, 150.0, updatedResp["rent_charges_amount"])
+	assert.Equal(t, true, updatedResp["is_furnished"])
 	assert.Equal(t, "123 Original St", updatedResp["address"]) // Should remain unchanged
 	assert.Equal(t, 2000.0, updatedResp["deposit_amount"])     // Should remain unchanged
 
@@ -79,6 +83,8 @@ func TestE2E_PropertyUpdate(t *testing.T) {
 	for _, p := range listResp {
 		if int(p["id"].(float64)) == propID {
 			assert.Equal(t, "Updated Name", p["name"])
+			assert.Equal(t, 150.0, p["rent_charges_amount"])
+			assert.Equal(t, true, p["is_furnished"])
 			found = true
 			break
 		}

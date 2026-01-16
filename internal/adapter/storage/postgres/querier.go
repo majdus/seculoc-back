@@ -26,6 +26,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DecreasePropertyCredits(ctx context.Context, id int32) error
 	GetInvitationByToken(ctx context.Context, token string) (LeaseInvitation, error)
+	GetLease(ctx context.Context, id int32) (Lease, error)
 	GetProperty(ctx context.Context, id int32) (Property, error)
 	GetPropertyForUpdate(ctx context.Context, id int32) (Property, error)
 	GetSolvencyCheckByID(ctx context.Context, id int32) (SolvencyCheck, error)
@@ -45,6 +46,7 @@ type Querier interface {
 	SoftDeleteProperty(ctx context.Context, arg SoftDeletePropertyParams) (int32, error)
 	UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error
 	UpdateLastContext(ctx context.Context, arg UpdateLastContextParams) error
+	UpdateLeaseContractURL(ctx context.Context, arg UpdateLeaseContractURLParams) error
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdateSolvencyCheckResult(ctx context.Context, arg UpdateSolvencyCheckResultParams) error
 	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error

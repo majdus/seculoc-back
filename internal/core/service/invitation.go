@@ -87,7 +87,8 @@ func (s *UserService) InviteTenant(ctx context.Context, ownerID int32, propertyI
 // AcceptInvitation allows a user to accept an invitation using a token.
 func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID int32) error {
 
-	return s.txManager.WithTx(ctx, func(q postgres.Querier) error {
+	var leaseID int32
+	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
 		// 1. Get Invitation
 		inv, err := q.GetInvitationByToken(ctx, token)
 		if err != nil {
@@ -113,7 +114,7 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 		}
 
 		// 4. Link User (Create Lease Draft)
-		_, err = q.CreateLease(ctx, postgres.CreateLeaseParams{
+		lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
 			PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
 			TenantID:      pgtype.Int4{Int32: userID, Valid: true},
 			StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
@@ -123,6 +124,7 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 		if err != nil {
 			return fmt.Errorf("failed to create lease: %w", err)
 		}
+		leaseID = lease.ID
 
 		// 5. Update Invitation Status
 		err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
@@ -132,6 +134,20 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 
 		return err
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Generate and Store Lease Document (Post-Transaction)
+	if leaseID != 0 {
+		if err := s.leaseService.GenerateAndSave(ctx, leaseID); err != nil {
+			logger.FromContext(ctx).Error("failed to generate lease document after accept", zap.Error(err))
+			// Non-critical: User can still access lease via fallback or we can retry later.
+		}
+	}
+
+	return nil
 }
 
 // InvitationDetailsDTO contains info for the public landing page

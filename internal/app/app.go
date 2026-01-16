@@ -10,6 +10,7 @@ import (
 
 	"seculoc-back/internal/adapter/http/handler"
 	"seculoc-back/internal/adapter/http/middleware"
+	"seculoc-back/internal/adapter/storage/local"
 	"seculoc-back/internal/adapter/storage/postgres"
 	"seculoc-back/internal/core/service"
 	"seculoc-back/internal/platform/email"
@@ -32,11 +33,16 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 		frontendURL = "http://localhost:5173"
 	}
 
-	userService := service.NewUserService(txManager, log, emailSender, frontendURL)
+	fileStore, err := local.NewFileStore()
+	if err != nil {
+		log.Fatal("failed to initialize file store", zap.Error(err))
+	}
+	leaseService := service.NewLeaseService(txManager, log, fileStore)
+
+	userService := service.NewUserService(txManager, log, emailSender, frontendURL, leaseService)
 	propService := service.NewPropertyService(txManager, log)
 	subService := service.NewSubscriptionService(txManager, log)
 	solvService := service.NewSolvencyService(txManager, emailSender, log)
-	leaseService := service.NewLeaseService(txManager, log)
 
 	// 3. Adapters (Handlers)
 	userHandler := handler.NewUserHandler(userService)
@@ -82,6 +88,7 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 
 			// Leases
 			protected.GET("/leases", leaseHandler.List)
+			protected.GET("/leases/:id/download", leaseHandler.Download)
 
 			// Subscriptions
 			protected.POST("/subscriptions", subHandler.Subscribe)

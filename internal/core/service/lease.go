@@ -9,13 +9,20 @@ import (
 	"seculoc-back/internal/adapter/storage/postgres"
 )
 
+type FileStorage interface {
+	Save(filename string, content []byte) (string, error)
+	Get(filename string) ([]byte, error)
+	Exists(filename string) bool
+}
+
 type LeaseService struct {
 	txManager TxManager
 	logger    *zap.Logger
+	storage   FileStorage
 }
 
-func NewLeaseService(txManager TxManager, logger *zap.Logger) *LeaseService {
-	return &LeaseService{txManager: txManager, logger: logger}
+func NewLeaseService(txManager TxManager, logger *zap.Logger, storage FileStorage) *LeaseService {
+	return &LeaseService{txManager: txManager, logger: logger, storage: storage}
 }
 
 type LeaseDTO struct {

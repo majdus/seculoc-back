@@ -89,7 +89,8 @@ func TestListLeases_DBError(t *testing.T) {
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewLeaseService(mockTx, zap.NewNop())
+	mockFileStore := new(MockFileStorage)
+	svc := NewLeaseService(mockTx, zap.NewNop(), mockFileStore)
 	tenantID := int32(5)
 
 	mockQuerier.On("ListLeasesByTenant", mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
@@ -102,4 +103,23 @@ func TestListLeases_DBError(t *testing.T) {
 
 func FactoryBigInt(v int64) *big.Int {
 	return big.NewInt(v)
+}
+
+type MockFileStorage struct {
+	mock.Mock
+}
+
+func (m *MockFileStorage) Save(filename string, content []byte) (string, error) {
+	args := m.Called(filename, content)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockFileStorage) Get(filename string) ([]byte, error) {
+	args := m.Called(filename)
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockFileStorage) Exists(filename string) bool {
+	args := m.Called(filename)
+	return args.Bool(0)
 }

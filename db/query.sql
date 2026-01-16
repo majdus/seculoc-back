@@ -34,16 +34,16 @@ SELECT * FROM users
 WHERE id = $1 LIMIT 1;
 
 -- name: GetProperty :one
-SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1;
 
 -- name: CreateProperty :one
 INSERT INTO properties (
-  owner_id, name, address, rental_type, details, rent_amount, deposit_amount
+  owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at;
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at;
 
 -- name: UpdateProperty :one
 UPDATE properties
@@ -53,9 +53,12 @@ SET
   rental_type = COALESCE(NULLIF($5, '')::property_type, rental_type),
   details = COALESCE($6, details),
   rent_amount = COALESCE($7, rent_amount),
-  deposit_amount = COALESCE($8, deposit_amount)
+  rent_charges_amount = COALESCE($8, rent_charges_amount),
+  deposit_amount = COALESCE($9, deposit_amount),
+  is_furnished = COALESCE($10, is_furnished),
+  seasonal_price_per_night = COALESCE($11, seasonal_price_per_night)
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at;
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at;
 
 -- name: DecreasePropertyCredits :exec
 UPDATE properties
@@ -64,7 +67,7 @@ WHERE id = $1 AND vacancy_credits > 0;
 
 
 -- name: ListPropertiesByOwner :many
-SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at FROM properties
 WHERE owner_id = $1
 ORDER BY created_at DESC;
 
@@ -227,3 +230,12 @@ FROM leases l
 JOIN properties p ON l.property_id = p.id
 WHERE l.tenant_id = $1
 ORDER BY l.created_at DESC;
+
+-- name: GetLease :one
+SELECT * FROM leases
+WHERE id = $1 LIMIT 1;
+
+-- name: UpdateLeaseContractURL :exec
+UPDATE leases
+SET contract_url = $2
+WHERE id = $1;

@@ -102,4 +102,5 @@ func initConfig() {
 
 	// Set defaults
 	viper.SetDefault("JWT_SECRET", "change_me_in_prod")
+	viper.SetDefault("JWT_EXPIRATION_HOURS", 24)
 }

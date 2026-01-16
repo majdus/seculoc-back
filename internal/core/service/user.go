@@ -48,19 +48,25 @@ type AuthResponse struct {
 	Profile        UserProfile    `json:"user_profile"`
 }
 
-type UserService struct {
-	txManager   TxManager
-	log         *zap.Logger
-	emailSender email.EmailSender
-	frontendURL string
+type LeaseGenerator interface {
+	GenerateAndSave(ctx context.Context, leaseID int32) error
 }
 
-func NewUserService(txManager TxManager, l *zap.Logger, emailSender email.EmailSender, frontendURL string) *UserService {
+type UserService struct {
+	txManager    TxManager
+	log          *zap.Logger
+	emailSender  email.EmailSender
+	frontendURL  string
+	leaseService LeaseGenerator
+}
+
+func NewUserService(txManager TxManager, l *zap.Logger, emailSender email.EmailSender, frontendURL string, leaseService LeaseGenerator) *UserService {
 	return &UserService{
-		txManager:   txManager,
-		log:         l,
-		emailSender: emailSender,
-		frontendURL: frontendURL,
+		txManager:    txManager,
+		log:          l,
+		emailSender:  emailSender,
+		frontendURL:  frontendURL,
+		leaseService: leaseService,
 	}
 }
 
@@ -69,6 +75,7 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 	log := logger.FromContext(ctx)
 	var user postgres.User
 
+	var leaseID int32
 	err := s.txManager.WithTx(ctx, func(q postgres.Querier) error {
 		// 1. Check uniqueness or provisional status
 		existingUser, err := q.GetUserByEmail(ctx, email)
@@ -152,7 +159,7 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 			// They are Nullable in DB? I set them as DECIMAL(10,2) in schema, default nullable.
 			// pgtype.Numeric needs handling.
 
-			_, err = q.CreateLease(ctx, postgres.CreateLeaseParams{
+			lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
 				PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
 				TenantID:      pgtype.Int4{Int32: user.ID, Valid: true},
 				StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
@@ -162,6 +169,7 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 			if err != nil {
 				return fmt.Errorf("failed to link property: %w", err)
 			}
+			leaseID = lease.ID
 
 			// Update Invitation Status
 			err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
@@ -192,6 +200,14 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Generate and Store Lease Document (Post-Transaction)
+	if leaseID != 0 {
+		// Use fire-and-forget or sync? Sync is safer for immediate availability.
+		if err := s.leaseService.GenerateAndSave(ctx, leaseID); err != nil {
+			log.Error("failed to generate lease document after register", zap.Error(err))
+		}
 	}
 
 	log.Info("user registered successfully", zap.Int("user_id", int(user.ID)), zap.String("email", email))

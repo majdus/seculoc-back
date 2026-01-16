@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,4 +107,58 @@ func registerAndLogin(t *testing.T, email, firstName, lastName string) string {
 	token, ok := loginResp["token"].(string)
 	require.True(t, ok)
 	return token
+}
+
+func TestE2E_DownloadLease(t *testing.T) {
+	viper.Set("ASSETS_DIR", "../../assets")
+	defer viper.Set("ASSETS_DIR", "")
+
+	// 1. Setup Data (Owner, Tenant, Property, Lease)
+	ownerEmail := "owner_dl_" + randomString() + "@example.com"
+	registerAndLogin(t, ownerEmail, "Owner", "One")
+	var ownerID int
+	pool.QueryRow(context.Background(), "SELECT id FROM users WHERE email=$1", ownerEmail).Scan(&ownerID)
+
+	tenantEmail := "tenant_dl_" + randomString() + "@example.com"
+	tenantToken := registerAndLogin(t, tenantEmail, "Tenant", "One")
+	var tenantID int
+	pool.QueryRow(context.Background(), "SELECT id FROM users WHERE email=$1", tenantEmail).Scan(&tenantID)
+
+	var propertyID int
+	pool.QueryRow(context.Background(), `
+		INSERT INTO properties (owner_id, address, rental_type, rent_amount, rent_charges_amount, is_furnished, created_at)
+		VALUES ($1, '123 Down St', 'long_term', 800, 50, false, NOW())
+		RETURNING id
+	`, ownerID).Scan(&propertyID)
+
+	var leaseID int
+	pool.QueryRow(context.Background(), `
+		INSERT INTO leases (
+			property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status, created_at
+		) VALUES (
+			$1, $2, NOW(), 800, 800, 'active', NOW()
+		)
+		RETURNING id
+	`, propertyID, tenantID).Scan(&leaseID)
+
+	t.Run("Nominal: Download Lease", func(t *testing.T) {
+		url := "/api/v1/leases/" + strconv.Itoa(leaseID) + "/download"
+		w := performRequest(router, "GET", url, tenantToken, nil)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Header().Get("Content-Disposition"), "attachment")
+		assert.Contains(t, w.Header().Get("Content-Disposition"), "contract.html")
+
+		body := w.Body.String()
+		assert.Contains(t, body, "CONTRAT DE LOCATION")
+		assert.Contains(t, body, "123 Down St") // Address
+		assert.Contains(t, body, "800")         // Rent
+		assert.Contains(t, body, "One Tenant")  // Tenant Name (Last First)
+	})
+
+	t.Run("NotFound", func(t *testing.T) {
+		w := performRequest(router, "GET", "/api/v1/leases/99999/download", tenantToken, nil)
+		assert.Equal(t, http.StatusInternalServerError, w.Code) // Should be 404 ideally, but service returns error
+		assert.Contains(t, w.Body.String(), "lease not found")
+	})
 }

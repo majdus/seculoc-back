@@ -33,7 +33,7 @@ func TestRegister_Success(t *testing.T) {
 	})
 
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	// Mocks
 	// GetUserByEmail should return NoRows (user does not exist)
@@ -79,7 +79,7 @@ func TestRegisterUser_AlreadyExists(t *testing.T) {
 	// emailSender := email.NewMockEmailSender(zap.NewNop()) // THIS IS THE BUG
 
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, testLogger, emailSender, "http://test.com")
+	svc := NewUserService(mockTx, testLogger, emailSender, "http://test.com", new(MockLeaseService))
 
 	// 2. Mocks
 	// GetUserByEmail returns a user (conflict)
@@ -106,7 +106,7 @@ func TestLogin_Success(t *testing.T) {
 	})
 
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	// Mock
 	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: pgtype.Text{String: "hashed_password123", Valid: true}}
@@ -136,7 +136,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	mockTx2 := new(MockTxManager)
 	mockQuerier2 := new(MockQuerier)
 	emailSender2 := email.NewMockEmailSender(zap.NewNop())
-	svc2 := NewUserService(mockTx2, zap.NewNop(), emailSender2, "http://test.com")
+	svc2 := NewUserService(mockTx2, zap.NewNop(), emailSender2, "http://test.com", new(MockLeaseService))
 
 	mockTx2.On("WithTx", mock.Anything, mock.Anything).Return(errors.New("invalid credentials")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -153,7 +153,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	mockTx3 := new(MockTxManager)
 	mockQuerier3 := new(MockQuerier)
 	emailSender3 := email.NewMockEmailSender(zap.NewNop())
-	svc3 := NewUserService(mockTx3, zap.NewNop(), emailSender3, "http://test.com")
+	svc3 := NewUserService(mockTx3, zap.NewNop(), emailSender3, "http://test.com", new(MockLeaseService))
 
 	mockTx3.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -186,7 +186,7 @@ func TestSwitchContext_Success(t *testing.T) {
 	})
 
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	userID := int32(1)
 
@@ -227,7 +227,7 @@ func TestSwitchContext_Forbidden(t *testing.T) {
 	})
 
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	userID := int32(1)
 

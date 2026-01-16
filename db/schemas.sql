@@ -77,7 +77,10 @@ CREATE TABLE properties (
     rental_type property_type NOT NULL, -- Longue durée ou Saisonnier [cite: 5]
     details JSONB, -- Surface, nbr pièces, description
     rent_amount DECIMAL(10, 2),
+    rent_charges_amount DECIMAL(10, 2) DEFAULT 0, -- Provisions sur charges
     deposit_amount DECIMAL(10, 2),
+    is_furnished BOOLEAN DEFAULT FALSE, -- Meublé ou Non
+    seasonal_price_per_night DECIMAL(10, 2), -- Prix nuitée saisonnier
     vacancy_credits INTEGER NOT NULL DEFAULT 20,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

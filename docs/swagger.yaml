@@ -23,6 +23,35 @@ definitions:
     - candidate_email
     - property_id
     type: object
+  internal_adapter_http_handler.CreatePropertyRequest:
+    properties:
+      address:
+        type: string
+      deposit_amount:
+        type: number
+      details:
+        additionalProperties: true
+        type: object
+      is_furnished:
+        type: boolean
+      name:
+        type: string
+      rent_amount:
+        type: number
+      rent_charges_amount:
+        type: number
+      rental_type:
+        enum:
+        - long_term
+        - seasonal
+        type: string
+      seasonal_price_per_night:
+        type: number
+    required:
+    - address
+    - details
+    - rental_type
+    type: object
   internal_adapter_http_handler.InviteTenantRequest:
     properties:
       email:
@@ -93,14 +122,20 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      is_furnished:
+        type: boolean
       name:
         type: string
       owner_id:
         type: integer
       rent_amount:
         type: number
+      rent_charges_amount:
+        type: number
       rental_type:
         type: string
+      seasonal_price_per_night:
+        type: number
       vacancy_credits:
         type: integer
     type: object
@@ -219,15 +254,21 @@ definitions:
       details:
         additionalProperties: true
         type: object
+      is_furnished:
+        type: boolean
       name:
         type: string
       rent_amount:
+        type: number
+      rent_charges_amount:
         type: number
       rental_type:
         enum:
         - long_term
         - seasonal
         type: string
+      seasonal_price_per_night:
+        type: number
     type: object
   seculoc-back_internal_core_service.Capabilities:
     properties:
@@ -537,6 +578,39 @@ paths:
       summary: List user leases
       tags:
       - leases
+  /leases/{id}/download:
+    get:
+      description: Generate and download the lease contract (HTML/PDF)
+      parameters:
+      - description: Lease ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download lease document
+      tags:
+      - leases
   /properties:
     get:
       consumes:
@@ -567,8 +641,7 @@ paths:
         name: request
         required: true
         schema:
-          additionalProperties: true
-          type: object
+          $ref: '#/definitions/internal_adapter_http_handler.CreatePropertyRequest'
       produces:
       - application/json
       responses:

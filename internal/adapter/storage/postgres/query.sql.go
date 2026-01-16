@@ -201,21 +201,24 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 
 const createProperty = `-- name: CreateProperty :one
 INSERT INTO properties (
-  owner_id, name, address, rental_type, details, rent_amount, deposit_amount
+  owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at
 `
 
 type CreatePropertyParams struct {
-	OwnerID       pgtype.Int4    `json:"owner_id"`
-	Name          pgtype.Text    `json:"name"`
-	Address       string         `json:"address"`
-	RentalType    PropertyType   `json:"rental_type"`
-	Details       []byte         `json:"details"`
-	RentAmount    pgtype.Numeric `json:"rent_amount"`
-	DepositAmount pgtype.Numeric `json:"deposit_amount"`
+	OwnerID               pgtype.Int4    `json:"owner_id"`
+	Name                  pgtype.Text    `json:"name"`
+	Address               string         `json:"address"`
+	RentalType            PropertyType   `json:"rental_type"`
+	Details               []byte         `json:"details"`
+	RentAmount            pgtype.Numeric `json:"rent_amount"`
+	RentChargesAmount     pgtype.Numeric `json:"rent_charges_amount"`
+	DepositAmount         pgtype.Numeric `json:"deposit_amount"`
+	IsFurnished           pgtype.Bool    `json:"is_furnished"`
+	SeasonalPricePerNight pgtype.Numeric `json:"seasonal_price_per_night"`
 }
 
 func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error) {
@@ -226,7 +229,10 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		arg.RentalType,
 		arg.Details,
 		arg.RentAmount,
+		arg.RentChargesAmount,
 		arg.DepositAmount,
+		arg.IsFurnished,
+		arg.SeasonalPricePerNight,
 	)
 	var i Property
 	err := row.Scan(
@@ -237,7 +243,10 @@ func (q *Queries) CreateProperty(ctx context.Context, arg CreatePropertyParams) 
 		&i.RentalType,
 		&i.Details,
 		&i.RentAmount,
+		&i.RentChargesAmount,
 		&i.DepositAmount,
+		&i.IsFurnished,
+		&i.SeasonalPricePerNight,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
@@ -410,8 +419,32 @@ func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Lease
 	return i, err
 }
 
+const getLease = `-- name: GetLease :one
+SELECT id, property_id, tenant_id, start_date, end_date, rent_amount, deposit_amount, lease_status, contract_url, escrow_deposit_status, created_at FROM leases
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetLease(ctx context.Context, id int32) (Lease, error) {
+	row := q.db.QueryRow(ctx, getLease, id)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.TenantID,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmount,
+		&i.DepositAmount,
+		&i.LeaseStatus,
+		&i.ContractUrl,
+		&i.EscrowDepositStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getProperty = `-- name: GetProperty :one
-SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 LIMIT 1
 `
 
@@ -426,7 +459,10 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 		&i.RentalType,
 		&i.Details,
 		&i.RentAmount,
+		&i.RentChargesAmount,
 		&i.DepositAmount,
+		&i.IsFurnished,
+		&i.SeasonalPricePerNight,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
@@ -435,7 +471,7 @@ func (q *Queries) GetProperty(ctx context.Context, id int32) (Property, error) {
 }
 
 const getPropertyForUpdate = `-- name: GetPropertyForUpdate :one
-SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at FROM properties
 WHERE id = $1 FOR UPDATE
 `
 
@@ -450,7 +486,10 @@ func (q *Queries) GetPropertyForUpdate(ctx context.Context, id int32) (Property,
 		&i.RentalType,
 		&i.Details,
 		&i.RentAmount,
+		&i.RentChargesAmount,
 		&i.DepositAmount,
+		&i.IsFurnished,
+		&i.SeasonalPricePerNight,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,
@@ -735,7 +774,7 @@ func (q *Queries) ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) 
 }
 
 const listPropertiesByOwner = `-- name: ListPropertiesByOwner :many
-SELECT id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at FROM properties
+SELECT id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at FROM properties
 WHERE owner_id = $1
 ORDER BY created_at DESC
 `
@@ -757,7 +796,10 @@ func (q *Queries) ListPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4
 			&i.RentalType,
 			&i.Details,
 			&i.RentAmount,
+			&i.RentChargesAmount,
 			&i.DepositAmount,
+			&i.IsFurnished,
+			&i.SeasonalPricePerNight,
 			&i.VacancyCredits,
 			&i.IsActive,
 			&i.CreatedAt,
@@ -946,6 +988,22 @@ func (q *Queries) UpdateLastContext(ctx context.Context, arg UpdateLastContextPa
 	return err
 }
 
+const updateLeaseContractURL = `-- name: UpdateLeaseContractURL :exec
+UPDATE leases
+SET contract_url = $2
+WHERE id = $1
+`
+
+type UpdateLeaseContractURLParams struct {
+	ID          int32       `json:"id"`
+	ContractUrl pgtype.Text `json:"contract_url"`
+}
+
+func (q *Queries) UpdateLeaseContractURL(ctx context.Context, arg UpdateLeaseContractURLParams) error {
+	_, err := q.db.Exec(ctx, updateLeaseContractURL, arg.ID, arg.ContractUrl)
+	return err
+}
+
 const updateProperty = `-- name: UpdateProperty :one
 UPDATE properties
 SET 
@@ -954,20 +1012,26 @@ SET
   rental_type = COALESCE(NULLIF($5, '')::property_type, rental_type),
   details = COALESCE($6, details),
   rent_amount = COALESCE($7, rent_amount),
-  deposit_amount = COALESCE($8, deposit_amount)
+  rent_charges_amount = COALESCE($8, rent_charges_amount),
+  deposit_amount = COALESCE($9, deposit_amount),
+  is_furnished = COALESCE($10, is_furnished),
+  seasonal_price_per_night = COALESCE($11, seasonal_price_per_night)
 WHERE id = $1 AND owner_id = $2
-RETURNING id, owner_id, name, address, rental_type, details, rent_amount, deposit_amount, vacancy_credits, is_active, created_at
+RETURNING id, owner_id, name, address, rental_type, details, rent_amount, rent_charges_amount, deposit_amount, is_furnished, seasonal_price_per_night, vacancy_credits, is_active, created_at
 `
 
 type UpdatePropertyParams struct {
-	ID            int32          `json:"id"`
-	OwnerID       pgtype.Int4    `json:"owner_id"`
-	Column3       interface{}    `json:"column_3"`
-	Column4       interface{}    `json:"column_4"`
-	Column5       interface{}    `json:"column_5"`
-	Details       []byte         `json:"details"`
-	RentAmount    pgtype.Numeric `json:"rent_amount"`
-	DepositAmount pgtype.Numeric `json:"deposit_amount"`
+	ID                    int32          `json:"id"`
+	OwnerID               pgtype.Int4    `json:"owner_id"`
+	Column3               interface{}    `json:"column_3"`
+	Column4               interface{}    `json:"column_4"`
+	Column5               interface{}    `json:"column_5"`
+	Details               []byte         `json:"details"`
+	RentAmount            pgtype.Numeric `json:"rent_amount"`
+	RentChargesAmount     pgtype.Numeric `json:"rent_charges_amount"`
+	DepositAmount         pgtype.Numeric `json:"deposit_amount"`
+	IsFurnished           pgtype.Bool    `json:"is_furnished"`
+	SeasonalPricePerNight pgtype.Numeric `json:"seasonal_price_per_night"`
 }
 
 func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error) {
@@ -979,7 +1043,10 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		arg.Column5,
 		arg.Details,
 		arg.RentAmount,
+		arg.RentChargesAmount,
 		arg.DepositAmount,
+		arg.IsFurnished,
+		arg.SeasonalPricePerNight,
 	)
 	var i Property
 	err := row.Scan(
@@ -990,7 +1057,10 @@ func (q *Queries) UpdateProperty(ctx context.Context, arg UpdatePropertyParams) 
 		&i.RentalType,
 		&i.Details,
 		&i.RentAmount,
+		&i.RentChargesAmount,
 		&i.DepositAmount,
+		&i.IsFurnished,
+		&i.SeasonalPricePerNight,
 		&i.VacancyCredits,
 		&i.IsActive,
 		&i.CreatedAt,

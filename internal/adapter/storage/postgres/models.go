@@ -304,17 +304,20 @@ type LeaseInvitation struct {
 }
 
 type Property struct {
-	ID             int32            `json:"id"`
-	OwnerID        pgtype.Int4      `json:"owner_id"`
-	Name           pgtype.Text      `json:"name"`
-	Address        string           `json:"address"`
-	RentalType     PropertyType     `json:"rental_type"`
-	Details        []byte           `json:"details"`
-	RentAmount     pgtype.Numeric   `json:"rent_amount"`
-	DepositAmount  pgtype.Numeric   `json:"deposit_amount"`
-	VacancyCredits int32            `json:"vacancy_credits"`
-	IsActive       pgtype.Bool      `json:"is_active"`
-	CreatedAt      pgtype.Timestamp `json:"created_at"`
+	ID                    int32            `json:"id"`
+	OwnerID               pgtype.Int4      `json:"owner_id"`
+	Name                  pgtype.Text      `json:"name"`
+	Address               string           `json:"address"`
+	RentalType            PropertyType     `json:"rental_type"`
+	Details               []byte           `json:"details"`
+	RentAmount            pgtype.Numeric   `json:"rent_amount"`
+	RentChargesAmount     pgtype.Numeric   `json:"rent_charges_amount"`
+	DepositAmount         pgtype.Numeric   `json:"deposit_amount"`
+	IsFurnished           pgtype.Bool      `json:"is_furnished"`
+	SeasonalPricePerNight pgtype.Numeric   `json:"seasonal_price_per_night"`
+	VacancyCredits        int32            `json:"vacancy_credits"`
+	IsActive              pgtype.Bool      `json:"is_active"`
+	CreatedAt             pgtype.Timestamp `json:"created_at"`
 }
 
 type RentPayment struct {

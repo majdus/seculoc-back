@@ -21,7 +21,7 @@ func TestInviteTenant_Success(t *testing.T) {
 	mockTx := new(MockTxManager)
 	mockQuerier := new(MockQuerier)
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -63,7 +63,7 @@ func TestAcceptInvitation_Success(t *testing.T) {
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -110,7 +110,7 @@ func TestAcceptInvitation_Expired(t *testing.T) {
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com")
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(fmt.Errorf("invitation expired")).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)

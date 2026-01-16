@@ -22,36 +22,45 @@ func NewPropertyHandler(svc *service.PropertyService) *PropertyHandler {
 }
 
 type CreatePropertyRequest struct {
-	Name          string                 `json:"name"`
-	Address       string                 `json:"address" binding:"required"`
-	RentalType    string                 `json:"rental_type" binding:"required,oneof=long_term seasonal"`
-	Details       map[string]interface{} `json:"details" binding:"required"`
-	RentAmount    float64                `json:"rent_amount"`
-	DepositAmount float64                `json:"deposit_amount"`
+	Name                  string                 `json:"name"`
+	Address               string                 `json:"address" binding:"required"`
+	RentalType            string                 `json:"rental_type" binding:"required,oneof=long_term seasonal"`
+	Details               map[string]interface{} `json:"details" binding:"required"`
+	RentAmount            float64                `json:"rent_amount"`
+	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	DepositAmount         float64                `json:"deposit_amount"`
+	IsFurnished           bool                   `json:"is_furnished"`
+	SeasonalPricePerNight float64                `json:"seasonal_price_per_night"`
 }
 
 type UpdatePropertyRequest struct {
-	Name          string                 `json:"name"`
-	Address       string                 `json:"address"`
-	RentalType    string                 `json:"rental_type" binding:"omitempty,oneof=long_term seasonal"`
-	Details       map[string]interface{} `json:"details"`
-	RentAmount    float64                `json:"rent_amount"`
-	DepositAmount float64                `json:"deposit_amount"`
+	Name                  string                 `json:"name"`
+	Address               string                 `json:"address"`
+	RentalType            string                 `json:"rental_type" binding:"omitempty,oneof=long_term seasonal"`
+	Details               map[string]interface{} `json:"details"`
+	RentAmount            float64                `json:"rent_amount"`
+	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	DepositAmount         float64                `json:"deposit_amount"`
+	IsFurnished           *bool                  `json:"is_furnished"`
+	SeasonalPricePerNight *float64               `json:"seasonal_price_per_night"`
 }
 
 // PropertyResponse represents the property object returned in API
 type PropertyResponse struct {
-	ID             int32                  `json:"id"`
-	OwnerID        int32                  `json:"owner_id"`
-	Name           string                 `json:"name"`
-	Address        string                 `json:"address"`
-	RentalType     string                 `json:"rental_type"`
-	Details        map[string]interface{} `json:"details"`
-	RentAmount     float64                `json:"rent_amount"`
-	DepositAmount  float64                `json:"deposit_amount"`
-	VacancyCredits int32                  `json:"vacancy_credits"`
-	IsActive       bool                   `json:"is_active"`
-	CreatedAt      string                 `json:"created_at"`
+	ID                    int32                  `json:"id"`
+	OwnerID               int32                  `json:"owner_id"`
+	Name                  string                 `json:"name"`
+	Address               string                 `json:"address"`
+	RentalType            string                 `json:"rental_type"`
+	Details               map[string]interface{} `json:"details"`
+	RentAmount            float64                `json:"rent_amount"`
+	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	DepositAmount         float64                `json:"deposit_amount"`
+	IsFurnished           bool                   `json:"is_furnished"`
+	SeasonalPricePerNight float64                `json:"seasonal_price_per_night"`
+	VacancyCredits        int32                  `json:"vacancy_credits"`
+	IsActive              bool                   `json:"is_active"`
+	CreatedAt             string                 `json:"created_at"`
 }
 
 // Create godoc
@@ -61,7 +70,7 @@ type PropertyResponse struct {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        request body map[string]interface{} true "Property Info"
+// @Param        request body CreatePropertyRequest true "Property Info"
 // @Success      201  {object}  PropertyResponse
 // @Failure      400  {object}  map[string]string
 // @Failure      403  {object}  map[string]string
@@ -88,7 +97,7 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 		return
 	}
 
-	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.DepositAmount)
+	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.RentChargesAmount, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
 	if err != nil {
 		if err.Error() == "property quota exceeded for current plan" {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -104,19 +113,24 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 
 	deposit, _ := prop.DepositAmount.Float64Value()
 	rent, _ := prop.RentAmount.Float64Value()
+	rentCharges, _ := prop.RentChargesAmount.Float64Value()
+	seasonalPrice, _ := prop.SeasonalPricePerNight.Float64Value()
 
 	c.JSON(http.StatusCreated, PropertyResponse{
-		ID:             prop.ID,
-		OwnerID:        prop.OwnerID.Int32,
-		Name:           prop.Name.String,
-		Address:        prop.Address,
-		RentalType:     string(prop.RentalType),
-		Details:        detailsMap,
-		RentAmount:     rent.Float64,
-		DepositAmount:  deposit.Float64,
-		VacancyCredits: prop.VacancyCredits,
-		IsActive:       prop.IsActive.Bool,
-		CreatedAt:      prop.CreatedAt.Time.String(),
+		ID:                    prop.ID,
+		OwnerID:               prop.OwnerID.Int32,
+		Name:                  prop.Name.String,
+		Address:               prop.Address,
+		RentalType:            string(prop.RentalType),
+		Details:               detailsMap,
+		RentAmount:            rent.Float64,
+		RentChargesAmount:     rentCharges.Float64,
+		DepositAmount:         deposit.Float64,
+		IsFurnished:           prop.IsFurnished.Bool,
+		SeasonalPricePerNight: seasonalPrice.Float64,
+		VacancyCredits:        prop.VacancyCredits,
+		IsActive:              prop.IsActive.Bool,
+		CreatedAt:             prop.CreatedAt.Time.String(),
 	})
 }
 
@@ -202,7 +216,7 @@ func (h *PropertyHandler) Update(c *gin.Context) {
 		detailsJSON = b
 	}
 
-	prop, err := h.svc.UpdateProperty(c.Request.Context(), userID, int32(id), req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.DepositAmount)
+	prop, err := h.svc.UpdateProperty(c.Request.Context(), userID, int32(id), req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.RentChargesAmount, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
 	if err != nil {
 		log.Error("failed to update property", zap.Error(err))
 		if err.Error() == "property not found or access denied" {
@@ -218,19 +232,24 @@ func (h *PropertyHandler) Update(c *gin.Context) {
 
 	deposit, _ := prop.DepositAmount.Float64Value()
 	rent, _ := prop.RentAmount.Float64Value()
+	rentCharges, _ := prop.RentChargesAmount.Float64Value()
+	seasonalPrice, _ := prop.SeasonalPricePerNight.Float64Value()
 
 	c.JSON(http.StatusOK, PropertyResponse{
-		ID:             prop.ID,
-		OwnerID:        prop.OwnerID.Int32,
-		Name:           prop.Name.String,
-		Address:        prop.Address,
-		RentalType:     string(prop.RentalType),
-		Details:        detailsMap,
-		RentAmount:     rent.Float64,
-		DepositAmount:  deposit.Float64,
-		VacancyCredits: prop.VacancyCredits,
-		IsActive:       prop.IsActive.Bool,
-		CreatedAt:      prop.CreatedAt.Time.String(),
+		ID:                    prop.ID,
+		OwnerID:               prop.OwnerID.Int32,
+		Name:                  prop.Name.String,
+		Address:               prop.Address,
+		RentalType:            string(prop.RentalType),
+		Details:               detailsMap,
+		RentAmount:            rent.Float64,
+		RentChargesAmount:     rentCharges.Float64,
+		DepositAmount:         deposit.Float64,
+		IsFurnished:           prop.IsFurnished.Bool,
+		SeasonalPricePerNight: seasonalPrice.Float64,
+		VacancyCredits:        prop.VacancyCredits,
+		IsActive:              prop.IsActive.Bool,
+		CreatedAt:             prop.CreatedAt.Time.String(),
 	})
 }
 

@@ -44,31 +44,35 @@ func TestCreateProperty_Success(t *testing.T) {
 	})).Return(int64(2), nil) // 2 < 5 OK
 
 	// Mock 3: Create
+	var charge pgtype.Numeric
+	charge.Scan("150.00")
 	expectedProp := postgres.Property{
-		ID:         1,
-		OwnerID:    pgtype.Int4{Int32: userID, Valid: true},
-		Address:    "123 Street",
-		RentalType: postgres.PropertyTypeLongTerm,
+		ID:                1,
+		OwnerID:           pgtype.Int4{Int32: userID, Valid: true},
+		Address:           "123 Street",
+		RentalType:        postgres.PropertyTypeLongTerm,
+		IsFurnished:       pgtype.Bool{Bool: true, Valid: true},
+		RentChargesAmount: charge,
 	}
 	mockQuerier.On("CreateProperty", mock.Anything, mock.MatchedBy(func(arg postgres.CreatePropertyParams) bool {
-		// Note from execution: Address was "123 Main St" vs "123 Street" in mock.
-		// Amounts are 1000 and 2000.
-		// arg.RentAmount is pgtype.Numeric.
-		// Simplest check:
 		r, _ := arg.RentAmount.Float64Value()
+		rc, _ := arg.RentChargesAmount.Float64Value()
 		d, _ := arg.DepositAmount.Float64Value()
 		return arg.Address == "123 Main St" &&
 			arg.RentalType == postgres.PropertyTypeLongTerm &&
 			r.Float64 == 1000.0 &&
-			d.Float64 == 2000.0
+			rc.Float64 == 150.0 &&
+			d.Float64 == 2000.0 &&
+			arg.IsFurnished.Bool == true
 	})).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "", "123 Main St", "long_term", "{}", 1000, 2000)
+	prop, err := svc.CreateProperty(ctx, userID, "", "123 Main St", "long_term", `{"rooms":3}`, 1000, 150, 2000, true, 0)
 
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, int32(1), prop.ID)
+	assert.True(t, prop.IsFurnished.Bool)
 }
 
 func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
@@ -103,7 +107,7 @@ func TestCreateProperty_Seasonal_AlwaysAllowed(t *testing.T) {
 	mockQuerier.On("CreateProperty", mock.Anything, mock.Anything).Return(expectedProp, nil)
 
 	// Execute
-	prop, err := svc.CreateProperty(ctx, userID, "", "Holiday Home", "seasonal", "{}", 0, 0)
+	prop, err := svc.CreateProperty(ctx, 1, "", "123 St", "seasonal", "{}", 100, 0, 200, true, 50)
 
 	// Assert
 	assert.NoError(t, err)
@@ -143,7 +147,7 @@ func TestCreateProperty_QuotaExceeded_LongTerm(t *testing.T) {
 	})).Return(int64(1), nil)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0)
+	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0, 0, false, 0)
 
 	// Assert
 	assert.Error(t, err)
@@ -174,7 +178,7 @@ func TestCreateProperty_NoSubscription(t *testing.T) {
 	mockQuerier.On("GetUserSubscription", mock.Anything, pgtype.Int4{Int32: userID, Valid: true}).Return(postgres.Subscription{}, pgx.ErrNoRows)
 
 	// Execute
-	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0)
+	_, err := svc.CreateProperty(ctx, userID, "", "123 Street", "long_term", "{}", 0, 0, 0, false, 0)
 
 	// Assert
 	assert.Error(t, err)
@@ -205,4 +209,49 @@ func TestListProperties(t *testing.T) {
 	list, err := svc.ListProperties(ctx, userID)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
+}
+
+func TestUpdateProperty(t *testing.T) {
+	// Setup
+	mockQuerier := new(MockQuerier)
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	svc := NewPropertyService(mockTx, zap.NewNop())
+	ctx := context.Background()
+	userID := int32(1)
+	propID := int32(10)
+
+	// Mock Update
+	var charge pgtype.Numeric
+	charge.Scan("50.00")
+	expectedProp := postgres.Property{
+		ID:                propID,
+		OwnerID:           pgtype.Int4{Int32: userID, Valid: true},
+		Name:              pgtype.Text{String: "New Name", Valid: true},
+		RentChargesAmount: charge, // 50.00
+		IsFurnished:       pgtype.Bool{Bool: true, Valid: true},
+	}
+
+	mockQuerier.On("UpdateProperty", mock.Anything, mock.MatchedBy(func(arg postgres.UpdatePropertyParams) bool {
+		rc, _ := arg.RentChargesAmount.Float64Value()
+		return arg.ID == propID &&
+			arg.OwnerID.Int32 == userID &&
+			arg.Column3.(pgtype.Text).String == "New Name" && // Name mapped to Column3
+			rc.Float64 == 50.0 &&
+			arg.IsFurnished.Bool == true
+	})).Return(expectedProp, nil)
+
+	// Execute
+	isFurnished := true
+	prop, err := svc.UpdateProperty(ctx, userID, propID, "New Name", "", "", "", 0, 50.0, 0, &isFurnished, nil)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, "New Name", prop.Name.String)
+	assert.True(t, prop.IsFurnished.Bool)
 }

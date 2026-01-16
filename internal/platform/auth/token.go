@@ -24,7 +24,12 @@ func GenerateToken(userID int32, email, currentContext string) (string, error) {
 		return "", errors.New("JWT_SECRET not setup")
 	}
 
-	expirationTime := time.Now().Add(24 * time.Hour)
+	hours := viper.GetInt("JWT_EXPIRATION_HOURS")
+	if hours <= 0 {
+		hours = 24 // Fallback
+	}
+
+	expirationTime := time.Now().Add(time.Duration(hours) * time.Hour)
 	claims := &Claims{
 		UserID:         userID,
 		Email:          email,
