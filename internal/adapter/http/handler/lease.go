@@ -49,18 +49,26 @@ func (h *LeaseHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, leases)
 }
 
-// Download godoc
-// @Summary      Download lease document
-// @Description  Generate and download the lease contract (HTML/PDF)
+// Preview godoc
+// @Summary      Preview lease document
+// @Description  Get the lease contract as HTML for display
 // @Tags         leases
 // @Produce      html
 // @Security     BearerAuth
 // @Param        id   path      int  true  "Lease ID"
-// @Success      200  {file}    file
+// @Success      200  {string}  string "HTML Content"
 // @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
-// @Router       /leases/{id}/download [get]
-func (h *LeaseHandler) Download(c *gin.Context) {
+// @Router       /leases/{id}/preview [get]
+func (h *LeaseHandler) Preview(c *gin.Context) {
+	// 1. Get UserID
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -68,18 +76,102 @@ func (h *LeaseHandler) Download(c *gin.Context) {
 		return
 	}
 
-	// TODO: Verify access (User is tenant or owner of this lease)
-	// For now, service might handle it or we relying on assumption user possesses ID.
-	// ideally Service should check ownership.
-	// But `GenerateLeaseDocument` currently fetches by ID. It doesn't check requester.
-	// I should pass UserID to `GenerateLeaseDocument` to authorize.
-
-	content, filename, err := h.svc.GetLeaseDocumentContent(c.Request.Context(), int32(id))
+	// Use GetLeaseDocumentContent (HTML)
+	content, _, err := h.svc.GetLeaseDocumentContent(c.Request.Context(), int32(id), userID)
 	if err != nil {
+		if err.Error() == fmt.Sprintf("access denied: user %d is not a party to this lease", userID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return inline HTML
+	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+}
+
+// Download godoc
+// @Summary      Download lease document (PDF)
+// @Description  Generate and download the lease contract as PDF
+// @Tags         leases
+// @Produce      application/pdf
+// @Security     BearerAuth
+// @Param        id   path      int  true  "Lease ID"
+// @Success      200  {file}    file
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /leases/{id}/download [get]
+func (h *LeaseHandler) Download(c *gin.Context) {
+	// 1. Get UserID
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lease id"})
+		return
+	}
+
+	// Generate PDF
+	pdfBytes, filename, err := h.svc.GenerateLeasePDF(c.Request.Context(), int32(id), userID)
+	if err != nil {
+		if err.Error() == fmt.Sprintf("access denied: user %d is not a party to this lease", userID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
+}
+
+// CreateDraft godoc
+// @Summary      Create a draft lease
+// @Description  Create a new lease in draft mode and invite the tenant
+// @Tags         leases
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body service.DraftLeaseRequest true "Draft Lease Details"
+// @Success      201  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /leases/draft [post]
+func (h *LeaseHandler) CreateDraft(c *gin.Context) {
+	// 1. Get Owner ID
+	ownerID, ok := middleware.GetUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	// 2. Bind JSON
+	var req service.DraftLeaseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 3. Call Service
+	leaseID, token, err := h.svc.CreateDraft(c.Request.Context(), req, ownerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 4. Return Success
+	c.JSON(http.StatusCreated, gin.H{
+		"id":      leaseID,
+		"token":   token,
+		"status":  "draft",
+		"message": "Lease created and invitation sent.",
+	})
 }

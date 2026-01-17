@@ -221,18 +221,56 @@ func (m *MockQuerier) UpdateSubscriptionLimit(ctx context.Context, arg postgres.
 	return args.Error(0)
 }
 
+func (m *MockQuerier) GetLease(ctx context.Context, id int32) (postgres.Lease, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(postgres.Lease), args.Error(1)
+}
+
+func (m *MockQuerier) UpdateLeaseContractURL(ctx context.Context, arg postgres.UpdateLeaseContractURLParams) error {
+	args := m.Called(ctx, arg)
+	return args.Error(0)
+}
+
 func (m *MockQuerier) UpdateUserPromotion(ctx context.Context, arg postgres.UpdateUserPromotionParams) error {
 	args := m.Called(ctx, arg)
 	return args.Error(0)
 }
+
+func (m *MockQuerier) CreateDraftLease(ctx context.Context, arg postgres.CreateDraftLeaseParams) (postgres.Lease, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.Lease), args.Error(1)
+}
+
+func (m *MockQuerier) UpdateLeaseTenant(ctx context.Context, arg postgres.UpdateLeaseTenantParams) error {
+	args := m.Called(ctx, arg)
 	return args.Error(0)
+}
+
+func (m *MockQuerier) CreateInvitationWithLease(ctx context.Context, arg postgres.CreateInvitationWithLeaseParams) (postgres.LeaseInvitation, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.LeaseInvitation), args.Error(1)
+}
+
+func (m *MockQuerier) GetInvitationByEmailAndProperty(ctx context.Context, arg postgres.GetInvitationByEmailAndPropertyParams) (postgres.LeaseInvitation, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.LeaseInvitation), args.Error(1)
+}
+
+func (m *MockQuerier) GetInvitationByLeaseID(ctx context.Context, leaseID pgtype.Int4) (postgres.LeaseInvitation, error) {
+	args := m.Called(ctx, leaseID)
+	return args.Get(0).(postgres.LeaseInvitation), args.Error(1)
+}
+
+func (m *MockQuerier) GetLeaseByPropertyAndStatus(ctx context.Context, arg postgres.GetLeaseByPropertyAndStatusParams) (postgres.Lease, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(postgres.Lease), args.Error(1)
 }
 
 type MockLeaseService struct {
 	mock.Mock
 }
 
-func (m *MockLeaseService) GenerateAndSave(ctx context.Context, leaseID int32) error {
-	args := m.Called(ctx, leaseID)
+func (m *MockLeaseService) GenerateAndSave(ctx context.Context, leaseID int32, userID int32) error {
+	args := m.Called(ctx, leaseID, userID)
 	return args.Error(0)
 }

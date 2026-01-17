@@ -117,6 +117,7 @@ func TestE2E_DownloadLease(t *testing.T) {
 	ownerEmail := "owner_dl_" + randomString() + "@example.com"
 	registerAndLogin(t, ownerEmail, "Owner", "One")
 	var ownerID int
+	var err error
 	pool.QueryRow(context.Background(), "SELECT id FROM users WHERE email=$1", ownerEmail).Scan(&ownerID)
 
 	tenantEmail := "tenant_dl_" + randomString() + "@example.com"
@@ -132,14 +133,15 @@ func TestE2E_DownloadLease(t *testing.T) {
 	`, ownerID).Scan(&propertyID)
 
 	var leaseID int
-	pool.QueryRow(context.Background(), `
+	err = pool.QueryRow(context.Background(), `
 		INSERT INTO leases (
-			property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status, created_at
+			property_id, tenant_id, start_date, rent_amount, charges_amount, deposit_amount, lease_status, created_at
 		) VALUES (
-			$1, $2, NOW(), 800, 800, 'active', NOW()
+			$1, $2, NOW(), 800, 50, 800, 'active', NOW()
 		)
 		RETURNING id
 	`, propertyID, tenantID).Scan(&leaseID)
+	require.NoError(t, err)
 
 	t.Run("Nominal: Download Lease", func(t *testing.T) {
 		url := "/api/v1/leases/" + strconv.Itoa(leaseID) + "/download"

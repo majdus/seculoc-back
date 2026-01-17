@@ -63,6 +63,7 @@ func TestMain(m *testing.M) {
 	// 2. Setup App Config
 	viper.Set("JWT_SECRET", "test_secret_for_e2e")
 	viper.Set("ENV", "test")
+	viper.Set("GIN_MODE", "test")
 
 	// Create temp storage for E2E
 	storageDir, _ := os.MkdirTemp("", "e2e_storage")
@@ -301,9 +302,9 @@ func TestE2E_ErrorCases(t *testing.T) {
 	w = performRequest(router, "POST", "/api/v1/solvency/check", token, map[string]interface{}{
 		"property_id": propID, "candidate_email": "broke@test.com",
 	})
-	// Expect 400 with "insufficient credits" message
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "insufficient credits")
+	// Expect 402 with "insufficient credits" message (or mapped error)
+	assert.Equal(t, http.StatusPaymentRequired, w.Code)
+	assert.Contains(t, w.Body.String(), "ERR_INSUFFICIENT_CREDITS")
 
 	// 5. Property Quota Exceeded (Discovery Plan limit is 1 Long Term)
 	// First Long Term Property -> Should Succeed (1/1)
@@ -316,8 +317,8 @@ func TestE2E_ErrorCases(t *testing.T) {
 	w = performRequest(router, "POST", "/api/v1/properties", token, map[string]interface{}{
 		"address": "Long Term 2", "rental_type": "long_term", "details": map[string]string{},
 	})
-	// Expect 400 Bad Request
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Expect 403 Forbidden (Quota Exceeded)
+	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "quota exceeded")
 }
 

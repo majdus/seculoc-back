@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/platform/auth"
 	"seculoc-back/internal/platform/email"
 	"seculoc-back/internal/platform/logger"
 )
@@ -49,7 +50,7 @@ type AuthResponse struct {
 }
 
 type LeaseGenerator interface {
-	GenerateAndSave(ctx context.Context, leaseID int32) error
+	GenerateAndSave(ctx context.Context, leaseID int32, userID int32) error
 }
 
 type UserService struct {
@@ -93,7 +94,10 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 		}
 
 		// 2. Prepare User Data
-		hashedPassword := "hashed_" + password
+		hashedPassword, err := auth.HashPassword(password)
+		if err != nil {
+			return fmt.Errorf("failed to hash password: %w", err)
+		}
 		initialContext := "owner" // Default
 
 		// 3. Create or Promote User
@@ -154,22 +158,31 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 				return fmt.Errorf("property not found for invitation")
 			}
 
-			// Create Lease
-			// Assuming RentAmount and DepositAmount in Property are valid (handled in CreateProperty)
-			// They are Nullable in DB? I set them as DECIMAL(10,2) in schema, default nullable.
-			// pgtype.Numeric needs handling.
-
-			lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
-				PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
-				TenantID:      pgtype.Int4{Int32: user.ID, Valid: true},
-				StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
-				RentAmount:    prop.RentAmount,
-				DepositAmount: prop.DepositAmount,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to link property: %w", err)
+			// Create or Update Lease
+			if inv.LeaseID.Valid {
+				leaseID = inv.LeaseID.Int32
+				err = q.UpdateLeaseTenant(ctx, postgres.UpdateLeaseTenantParams{
+					ID:       leaseID,
+					TenantID: pgtype.Int4{Int32: user.ID, Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("failed to link draft lease: %w", err)
+				}
+			} else {
+				// Legacy Flow
+				lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
+					PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
+					TenantID:      pgtype.Int4{Int32: user.ID, Valid: true},
+					StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
+					RentAmount:    prop.RentAmount,
+					ChargesAmount: prop.RentChargesAmount, // Correctly snapshot charges
+					DepositAmount: prop.DepositAmount,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to link property: %w", err)
+				}
+				leaseID = lease.ID
 			}
-			leaseID = lease.ID
 
 			// Update Invitation Status
 			err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
@@ -205,7 +218,8 @@ func (s *UserService) Register(ctx context.Context, email, password, firstName, 
 	// Generate and Store Lease Document (Post-Transaction)
 	if leaseID != 0 {
 		// Use fire-and-forget or sync? Sync is safer for immediate availability.
-		if err := s.leaseService.GenerateAndSave(ctx, leaseID); err != nil {
+		// Pass the newly created user's ID (tenant)
+		if err := s.leaseService.GenerateAndSave(ctx, leaseID, user.ID); err != nil {
 			log.Error("failed to generate lease document after register", zap.Error(err))
 		}
 	}
@@ -240,8 +254,13 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*AuthR
 	}
 
 	// 2. Validate Password
-	hashedInput := "hashed_" + password
-	if user.PasswordHash.String != hashedInput {
+	match, err := auth.CheckPasswordHash(password, user.PasswordHash.String)
+	if err != nil {
+		// Log error but return generic credentials error
+		log.Error("password check failed", zap.Error(err))
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	if !match {
 		log.Warn("login failed: invalid password", zap.String("email", email))
 		return nil, fmt.Errorf("invalid credentials")
 	}

@@ -285,8 +285,13 @@ type Lease struct {
 	StartDate           pgtype.Date      `json:"start_date"`
 	EndDate             pgtype.Date      `json:"end_date"`
 	RentAmount          pgtype.Numeric   `json:"rent_amount"`
+	ChargesAmount       pgtype.Numeric   `json:"charges_amount"`
 	DepositAmount       pgtype.Numeric   `json:"deposit_amount"`
+	PaymentDay          pgtype.Int4      `json:"payment_day"`
+	SpecialClauses      []byte           `json:"special_clauses"`
 	LeaseStatus         pgtype.Text      `json:"lease_status"`
+	SignatureStatus     pgtype.Text      `json:"signature_status"`
+	SignatureEnvelopeID pgtype.Text      `json:"signature_envelope_id"`
 	ContractUrl         pgtype.Text      `json:"contract_url"`
 	EscrowDepositStatus NullEscrowStatus `json:"escrow_deposit_status"`
 	CreatedAt           pgtype.Timestamp `json:"created_at"`
@@ -295,6 +300,7 @@ type Lease struct {
 type LeaseInvitation struct {
 	ID          int32            `json:"id"`
 	PropertyID  int32            `json:"property_id"`
+	LeaseID     pgtype.Int4      `json:"lease_id"`
 	OwnerID     int32            `json:"owner_id"`
 	TenantEmail string           `json:"tenant_email"`
 	Token       string           `json:"token"`

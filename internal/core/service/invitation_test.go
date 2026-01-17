@@ -63,7 +63,8 @@ func TestAcceptInvitation_Success(t *testing.T) {
 	mockQuerier := new(MockQuerier)
 	mockTx := new(MockTxManager)
 	emailSender := email.NewMockEmailSender(zap.NewNop())
-	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
+	mockLeaseService := new(MockLeaseService)
+	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", mockLeaseService)
 
 	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		fn := args.Get(1).(func(postgres.Querier) error)
@@ -96,6 +97,9 @@ func TestAcceptInvitation_Success(t *testing.T) {
 		ID:     1,
 		Status: pgtype.Text{String: "accepted", Valid: true},
 	}).Return(nil)
+
+	// Expect Lease Generation
+	mockLeaseService.On("GenerateAndSave", mock.Anything, int32(1), userID).Return(nil)
 
 	// Execute
 	err := svc.AcceptInvitation(context.Background(), token, userID)

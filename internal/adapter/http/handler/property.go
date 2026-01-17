@@ -28,6 +28,7 @@ type CreatePropertyRequest struct {
 	Details               map[string]interface{} `json:"details" binding:"required"`
 	RentAmount            float64                `json:"rent_amount"`
 	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	ChargesAmount         float64                `json:"charges_amount"` // Alias
 	DepositAmount         float64                `json:"deposit_amount"`
 	IsFurnished           bool                   `json:"is_furnished"`
 	SeasonalPricePerNight float64                `json:"seasonal_price_per_night"`
@@ -40,6 +41,7 @@ type UpdatePropertyRequest struct {
 	Details               map[string]interface{} `json:"details"`
 	RentAmount            float64                `json:"rent_amount"`
 	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	ChargesAmount         float64                `json:"charges_amount"` // Alias
 	DepositAmount         float64                `json:"deposit_amount"`
 	IsFurnished           *bool                  `json:"is_furnished"`
 	SeasonalPricePerNight *float64               `json:"seasonal_price_per_night"`
@@ -55,6 +57,7 @@ type PropertyResponse struct {
 	Details               map[string]interface{} `json:"details"`
 	RentAmount            float64                `json:"rent_amount"`
 	RentChargesAmount     float64                `json:"rent_charges_amount"`
+	ChargesAmount         float64                `json:"charges_amount"` // Alias
 	DepositAmount         float64                `json:"deposit_amount"`
 	IsFurnished           bool                   `json:"is_furnished"`
 	SeasonalPricePerNight float64                `json:"seasonal_price_per_night"`
@@ -97,7 +100,12 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 		return
 	}
 
-	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.RentChargesAmount, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
+	finalCharges := req.RentChargesAmount
+	if finalCharges == 0 && req.ChargesAmount != 0 {
+		finalCharges = req.ChargesAmount
+	}
+
+	prop, err := h.svc.CreateProperty(c.Request.Context(), userID, req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, finalCharges, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
 	if err != nil {
 		if err.Error() == "property quota exceeded for current plan" {
 			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -125,6 +133,7 @@ func (h *PropertyHandler) Create(c *gin.Context) {
 		Details:               detailsMap,
 		RentAmount:            rent.Float64,
 		RentChargesAmount:     rentCharges.Float64,
+		ChargesAmount:         rentCharges.Float64,
 		DepositAmount:         deposit.Float64,
 		IsFurnished:           prop.IsFurnished.Bool,
 		SeasonalPricePerNight: seasonalPrice.Float64,
@@ -156,7 +165,36 @@ func (h *PropertyHandler) List(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, props)
+	response := make([]PropertyResponse, len(props))
+	for i, p := range props {
+		var detailsMap map[string]interface{}
+		json.Unmarshal(p.Details, &detailsMap)
+
+		rent, _ := p.RentAmount.Float64Value()
+		charges, _ := p.RentChargesAmount.Float64Value()
+		deposit, _ := p.DepositAmount.Float64Value()
+		seasonal, _ := p.SeasonalPricePerNight.Float64Value()
+
+		response[i] = PropertyResponse{
+			ID:                    p.ID,
+			OwnerID:               p.OwnerID.Int32,
+			Name:                  p.Name.String,
+			Address:               p.Address,
+			RentalType:            string(p.RentalType),
+			Details:               detailsMap,
+			RentAmount:            rent.Float64,
+			RentChargesAmount:     charges.Float64,
+			ChargesAmount:         charges.Float64,
+			DepositAmount:         deposit.Float64,
+			IsFurnished:           p.IsFurnished.Bool,
+			SeasonalPricePerNight: seasonal.Float64,
+			VacancyCredits:        p.VacancyCredits,
+			IsActive:              p.IsActive.Bool,
+			CreatedAt:             p.CreatedAt.Time.String(),
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // Delete godoc
@@ -216,7 +254,12 @@ func (h *PropertyHandler) Update(c *gin.Context) {
 		detailsJSON = b
 	}
 
-	prop, err := h.svc.UpdateProperty(c.Request.Context(), userID, int32(id), req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, req.RentChargesAmount, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
+	finalCharges := req.RentChargesAmount
+	if finalCharges == 0 && req.ChargesAmount != 0 {
+		finalCharges = req.ChargesAmount
+	}
+
+	prop, err := h.svc.UpdateProperty(c.Request.Context(), userID, int32(id), req.Name, req.Address, req.RentalType, string(detailsJSON), req.RentAmount, finalCharges, req.DepositAmount, req.IsFurnished, req.SeasonalPricePerNight)
 	if err != nil {
 		log.Error("failed to update property", zap.Error(err))
 		if err.Error() == "property not found or access denied" {
@@ -244,6 +287,7 @@ func (h *PropertyHandler) Update(c *gin.Context) {
 		Details:               detailsMap,
 		RentAmount:            rent.Float64,
 		RentChargesAmount:     rentCharges.Float64,
+		ChargesAmount:         rentCharges.Float64,
 		DepositAmount:         deposit.Float64,
 		IsFurnished:           prop.IsFurnished.Bool,
 		SeasonalPricePerNight: seasonalPrice.Float64,

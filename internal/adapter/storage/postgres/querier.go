@@ -18,15 +18,20 @@ type Querier interface {
 	CountPropertiesByOwner(ctx context.Context, ownerID pgtype.Int4) (int64, error)
 	CountPropertiesByOwnerAndType(ctx context.Context, arg CountPropertiesByOwnerAndTypeParams) (int64, error)
 	CreateCreditTransaction(ctx context.Context, arg CreateCreditTransactionParams) (CreditTransaction, error)
+	CreateDraftLease(ctx context.Context, arg CreateDraftLeaseParams) (Lease, error)
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (LeaseInvitation, error)
+	CreateInvitationWithLease(ctx context.Context, arg CreateInvitationWithLeaseParams) (LeaseInvitation, error)
 	CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
 	CreateSolvencyCheck(ctx context.Context, arg CreateSolvencyCheckParams) (SolvencyCheck, error)
 	CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DecreasePropertyCredits(ctx context.Context, id int32) error
+	GetInvitationByEmailAndProperty(ctx context.Context, arg GetInvitationByEmailAndPropertyParams) (LeaseInvitation, error)
+	GetInvitationByLeaseID(ctx context.Context, leaseID pgtype.Int4) (LeaseInvitation, error)
 	GetInvitationByToken(ctx context.Context, token string) (LeaseInvitation, error)
 	GetLease(ctx context.Context, id int32) (Lease, error)
+	GetLeaseByPropertyAndStatus(ctx context.Context, arg GetLeaseByPropertyAndStatusParams) (Lease, error)
 	GetProperty(ctx context.Context, id int32) (Property, error)
 	GetPropertyForUpdate(ctx context.Context, id int32) (Property, error)
 	GetSolvencyCheckByID(ctx context.Context, id int32) (SolvencyCheck, error)
@@ -47,6 +52,7 @@ type Querier interface {
 	UpdateInvitationStatus(ctx context.Context, arg UpdateInvitationStatusParams) error
 	UpdateLastContext(ctx context.Context, arg UpdateLastContextParams) error
 	UpdateLeaseContractURL(ctx context.Context, arg UpdateLeaseContractURLParams) error
+	UpdateLeaseTenant(ctx context.Context, arg UpdateLeaseTenantParams) error
 	UpdateProperty(ctx context.Context, arg UpdatePropertyParams) (Property, error)
 	UpdateSolvencyCheckResult(ctx context.Context, arg UpdateSolvencyCheckResultParams) error
 	UpdateSubscriptionLimit(ctx context.Context, arg UpdateSubscriptionLimitParams) error

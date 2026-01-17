@@ -216,15 +216,28 @@ WHERE tenant_id = $1 AND booking_status = 'confirmed';
 
 -- name: CreateLease :one
 INSERT INTO leases (
-    property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status
+    property_id, tenant_id, start_date, rent_amount, charges_amount, deposit_amount, lease_status
 ) VALUES (
-    $1, $2, $3, $4, $5, 'draft'
+    $1, $2, $3, $4, $5, $6, 'draft'
 )
 RETURNING *;
 
+-- name: CreateDraftLease :one
+INSERT INTO leases (
+    property_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, 'draft'
+)
+RETURNING *;
+
+-- name: UpdateLeaseTenant :exec
+UPDATE leases
+SET tenant_id = $2, lease_status = 'active' -- Or 'pending_signature'
+WHERE id = $1;
+
 -- name: ListLeasesByTenant :many
 SELECT 
-    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.deposit_amount, l.lease_status, l.contract_url, l.created_at,
+    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.charges_amount, l.deposit_amount, l.lease_status, l.signature_status, l.contract_url, l.created_at,
     p.address as property_address, p.rental_type
 FROM leases l
 JOIN properties p ON l.property_id = p.id
@@ -235,7 +248,24 @@ ORDER BY l.created_at DESC;
 SELECT * FROM leases
 WHERE id = $1 LIMIT 1;
 
+-- name: GetLeaseByPropertyAndStatus :one
+SELECT * FROM leases
+WHERE property_id = $1 AND lease_status = $2 LIMIT 1;
+
 -- name: UpdateLeaseContractURL :exec
 UPDATE leases
 SET contract_url = $2
 WHERE id = $1;
+
+-- name: CreateInvitationWithLease :one
+INSERT INTO lease_invitations (property_id, lease_id, owner_id, tenant_email, token, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetInvitationByEmailAndProperty :one
+SELECT * FROM lease_invitations
+WHERE tenant_email = $1 AND property_id = $2 AND status = 'pending' LIMIT 1;
+
+-- name: GetInvitationByLeaseID :one
+SELECT * FROM lease_invitations
+WHERE lease_id = $1 LIMIT 1;

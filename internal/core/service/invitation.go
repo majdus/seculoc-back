@@ -113,18 +113,32 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 			return fmt.Errorf("property not found")
 		}
 
-		// 4. Link User (Create Lease Draft)
-		lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
-			PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
-			TenantID:      pgtype.Int4{Int32: userID, Valid: true},
-			StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
-			RentAmount:    prop.RentAmount,
-			DepositAmount: prop.DepositAmount,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create lease: %w", err)
+		// 4. Link User
+		if inv.LeaseID.Valid {
+			// A. Draft Lease Exists -> Update Tenant
+			leaseID = inv.LeaseID.Int32
+			err = q.UpdateLeaseTenant(ctx, postgres.UpdateLeaseTenantParams{
+				ID:       leaseID,
+				TenantID: pgtype.Int4{Int32: userID, Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to assign draft lease: %w", err)
+			}
+		} else {
+			// B. No Draft -> Create New Lease (Legacy/Direct Invite)
+			lease, err := q.CreateLease(ctx, postgres.CreateLeaseParams{
+				PropertyID:    pgtype.Int4{Int32: inv.PropertyID, Valid: true},
+				TenantID:      pgtype.Int4{Int32: userID, Valid: true},
+				StartDate:     pgtype.Date{Time: time.Now(), Valid: true},
+				RentAmount:    prop.RentAmount,
+				ChargesAmount: prop.RentChargesAmount, // Correctly snapshot charges
+				DepositAmount: prop.DepositAmount,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create lease: %w", err)
+			}
+			leaseID = lease.ID
 		}
-		leaseID = lease.ID
 
 		// 5. Update Invitation Status
 		err = q.UpdateInvitationStatus(ctx, postgres.UpdateInvitationStatusParams{
@@ -141,7 +155,7 @@ func (s *UserService) AcceptInvitation(ctx context.Context, token string, userID
 
 	// Generate and Store Lease Document (Post-Transaction)
 	if leaseID != 0 {
-		if err := s.leaseService.GenerateAndSave(ctx, leaseID); err != nil {
+		if err := s.leaseService.GenerateAndSave(ctx, leaseID, userID); err != nil {
 			logger.FromContext(ctx).Error("failed to generate lease document after accept", zap.Error(err))
 			// Non-critical: User can still access lease via fallback or we can retry later.
 		}
@@ -155,6 +169,7 @@ type InvitationDetailsDTO struct {
 	Email           string  `json:"email"`
 	PropertyAddress string  `json:"property_address"`
 	RentAmount      float64 `json:"rent_amount"`
+	ChargesAmount   float64 `json:"charges_amount"`
 	DepositAmount   float64 `json:"deposit_amount"`
 	OwnerName       string  `json:"owner_name"`
 }
@@ -186,8 +201,10 @@ func (s *UserService) GetInvitationDetails(ctx context.Context, token string) (*
 		}
 		details.PropertyAddress = prop.Address
 		rent, _ := prop.RentAmount.Float64Value()
+		charges, _ := prop.RentChargesAmount.Float64Value()
 		deposit, _ := prop.DepositAmount.Float64Value()
 		details.RentAmount = rent.Float64
+		details.ChargesAmount = charges.Float64
 		details.DepositAmount = deposit.Float64
 
 		// 3. Get Owner Name

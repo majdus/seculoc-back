@@ -25,7 +25,8 @@ func TestListLeases_Success(t *testing.T) {
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewLeaseService(mockTx, zap.NewNop())
+	mockFileStore := new(MockFileStorage)
+	svc := NewLeaseService(mockTx, zap.NewNop(), mockFileStore)
 
 	tenantID := int32(5)
 
@@ -68,7 +69,8 @@ func TestListLeases_Empty(t *testing.T) {
 		_ = fn(mockQuerier)
 	})
 
-	svc := NewLeaseService(mockTx, zap.NewNop())
+	mockFileStore := new(MockFileStorage)
+	svc := NewLeaseService(mockTx, zap.NewNop(), mockFileStore)
 	tenantID := int32(5)
 
 	mockQuerier.On("ListLeasesByTenant", mock.Anything, pgtype.Int4{Int32: tenantID, Valid: true}).Return([]postgres.ListLeasesByTenantRow{}, nil)
@@ -99,6 +101,63 @@ func TestListLeases_DBError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, leases)
+}
+
+func TestCreateDraft_Success(t *testing.T) {
+	mockQuerier := new(MockQuerier)
+	mockTx := new(MockTxManager)
+
+	mockTx.On("WithTx", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		fn := args.Get(1).(func(postgres.Querier) error)
+		_ = fn(mockQuerier)
+	})
+
+	mockFileStore := new(MockFileStorage)
+	svc := NewLeaseService(mockTx, zap.NewNop(), mockFileStore)
+
+	ownerID := int32(1)
+	req := DraftLeaseRequest{
+		PropertyID: 10,
+		TenantInfo: TenantDraft{
+			FirstName: "Jean",
+			LastName:  "Dupont",
+			Email:     "jean@example.com",
+		},
+		Terms: LeaseTerms{
+			StartDate:     "2026-02-01",
+			RentAmount:    800,
+			ChargesAmount: 100, // Important: verify this persists
+			DepositAmount: 800,
+			PaymentDay:    5,
+		},
+	}
+
+	// 1. Mock GetProperty
+	mockQuerier.On("GetProperty", mock.Anything, int32(10)).Return(postgres.Property{
+		ID:      10,
+		OwnerID: pgtype.Int4{Int32: ownerID, Valid: true},
+	}, nil)
+
+	// 2. Mock CreateDraftLease
+	mockQuerier.On("CreateDraftLease", mock.Anything, mock.MatchedBy(func(p postgres.CreateDraftLeaseParams) bool {
+		rent, _ := p.RentAmount.Float64Value()
+		charges, _ := p.ChargesAmount.Float64Value()
+		return rent.Float64 == 800 && charges.Float64 == 100
+	})).Return(postgres.Lease{ID: 100}, nil)
+
+	// 3. Mock CreateInvitationWithLease
+	mockQuerier.On("CreateInvitationWithLease", mock.Anything, mock.MatchedBy(func(p postgres.CreateInvitationWithLeaseParams) bool {
+		return p.LeaseID.Int32 == 100 && p.TenantEmail == "jean@example.com"
+	})).Return(postgres.LeaseInvitation{}, nil)
+
+	// Execute
+	leaseID, token, err := svc.CreateDraft(context.Background(), req, ownerID)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.Equal(t, int32(100), leaseID)
+	assert.NotEmpty(t, token)
+	mockQuerier.AssertExpectations(t)
 }
 
 func FactoryBigInt(v int64) *big.Int {

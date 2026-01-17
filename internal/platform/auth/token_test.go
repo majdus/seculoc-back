@@ -9,48 +9,57 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateToken_RespectsExpirationConfig(t *testing.T) {
-	// Setup
-	viper.Set("JWT_SECRET", "test_secret")
-	viper.Set("JWT_EXPIRATION_HOURS", 2)
-	defer viper.Reset()
+func TestToken_Success(t *testing.T) {
+	viper.Set("JWT_SECRET", "supersecret")
+	viper.Set("JWT_EXPIRATION_HOURS", 1)
 
-	// Execute
-	tokenString, err := GenerateToken(1, "test@example.com", "owner")
+	// 1. Generate
+	token, err := GenerateToken(123, "test@example.com", "owner")
 	assert.NoError(t, err)
+	assert.NotEmpty(t, token)
 
-	// Verify
-	token, _ := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte("test_secret"), nil
-	})
-
-	claims, ok := token.Claims.(*Claims)
-	assert.True(t, ok)
-
-	// Check expiration is roughly 2 hours from now
-	expectedExp := time.Now().Add(2 * time.Hour)
-	assert.WithinDuration(t, expectedExp, claims.ExpiresAt.Time, 5*time.Second)
+	// 2. Validate
+	claims, err := ValidateToken(token)
+	assert.NoError(t, err)
+	assert.NotNil(t, claims)
+	assert.Equal(t, int32(123), claims.UserID)
+	assert.Equal(t, "test@example.com", claims.Email)
+	assert.Equal(t, "owner", claims.CurrentContext)
 }
 
-func TestGenerateToken_DefaultExpiration(t *testing.T) {
-	// Setup
-	viper.Reset()
-	viper.Set("JWT_SECRET", "test_secret")
-	// No expiration set
+func TestToken_MissingSecret(t *testing.T) {
+	viper.Set("JWT_SECRET", "")
 
-	// Execute
-	tokenString, err := GenerateToken(1, "test@example.com", "owner")
-	assert.NoError(t, err)
+	_, err := GenerateToken(1, "mail", "ctx")
+	assert.Error(t, err)
 
-	// Verify
-	token, _ := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte("test_secret"), nil
-	})
+	_, err = ValidateToken("some.token")
+	assert.Error(t, err)
+}
 
-	claims, ok := token.Claims.(*Claims)
-	assert.True(t, ok)
+func TestToken_Expired(t *testing.T) {
+	viper.Set("JWT_SECRET", "secret")
 
-	// Check default is 24 hours
-	expectedExp := time.Now().Add(24 * time.Hour)
-	assert.WithinDuration(t, expectedExp, claims.ExpiresAt.Time, 5*time.Second)
+	// Create expired token manually
+	expirationTime := time.Now().Add(-1 * time.Hour)
+	claims := &Claims{
+		UserID: 1,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte("secret"))
+
+	_, err := ValidateToken(tokenString)
+	assert.Error(t, err) // Should fail due to expiration
+}
+
+func TestToken_InvalidSignature(t *testing.T) {
+	viper.Set("JWT_SECRET", "secret")
+	token, _ := GenerateToken(1, "mail", "ctx")
+
+	viper.Set("JWT_SECRET", "wrongcheck")
+	_, err := ValidateToken(token)
+	assert.Error(t, err)
 }

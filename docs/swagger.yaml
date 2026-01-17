@@ -277,6 +277,23 @@ definitions:
       can_act_as_tenant:
         type: boolean
     type: object
+  seculoc-back_internal_core_service.DraftLeaseRequest:
+    properties:
+      clauses:
+        items:
+          type: string
+        type: array
+      property_id:
+        type: integer
+      tenant_info:
+        $ref: '#/definitions/seculoc-back_internal_core_service.TenantDraft'
+      terms:
+        $ref: '#/definitions/seculoc-back_internal_core_service.LeaseTerms'
+    required:
+    - property_id
+    - tenant_info
+    - terms
+    type: object
   seculoc-back_internal_core_service.InvitationDetailsDTO:
     properties:
       deposit_amount:
@@ -292,6 +309,9 @@ definitions:
     type: object
   seculoc-back_internal_core_service.LeaseDTO:
     properties:
+      charges_amount:
+        description: Added
+        type: number
       contract_url:
         type: string
       deposit_amount:
@@ -313,6 +333,30 @@ definitions:
       status:
         type: string
     type: object
+  seculoc-back_internal_core_service.LeaseTerms:
+    properties:
+      charges_amount:
+        type: number
+      deposit_amount:
+        type: number
+      end_date:
+        description: YYYY-MM-DD (Optional)
+        type: string
+      payment_day:
+        maximum: 31
+        minimum: 1
+        type: integer
+      rent_amount:
+        type: number
+      start_date:
+        description: YYYY-MM-DD
+        type: string
+    required:
+    - deposit_amount
+    - payment_day
+    - rent_amount
+    - start_date
+    type: object
   seculoc-back_internal_core_service.SubscriptionDTO:
     properties:
       end_date:
@@ -327,6 +371,21 @@ definitions:
         type: string
       status:
         type: string
+    type: object
+  seculoc-back_internal_core_service.TenantDraft:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      phone:
+        type: string
+    required:
+    - email
+    - first_name
+    - last_name
     type: object
   seculoc-back_internal_core_service.TransactionData:
     properties:
@@ -580,7 +639,46 @@ paths:
       - leases
   /leases/{id}/download:
     get:
-      description: Generate and download the lease contract (HTML/PDF)
+      description: Generate and download the lease contract as PDF
+      parameters:
+      - description: Lease ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/pdf
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Download lease document (PDF)
+      tags:
+      - leases
+  /leases/{id}/preview:
+    get:
+      description: Get the lease contract as HTML for display
       parameters:
       - description: Lease ID
         in: path
@@ -591,9 +689,52 @@ paths:
       - text/html
       responses:
         "200":
-          description: OK
+          description: HTML Content
           schema:
-            type: file
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Preview lease document
+      tags:
+      - leases
+  /leases/draft:
+    post:
+      consumes:
+      - application/json
+      description: Create a new lease in draft mode and invite the tenant
+      parameters:
+      - description: Draft Lease Details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/seculoc-back_internal_core_service.DraftLeaseRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
         "400":
           description: Bad Request
           schema:
@@ -608,7 +749,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Download lease document
+      summary: Create a draft lease
       tags:
       - leases
   /properties:

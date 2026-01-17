@@ -2,10 +2,15 @@ package app
 
 import (
 	"net/http"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
+	"github.com/ulule/limiter/v3"
+	mgin "github.com/ulule/limiter/v3/drivers/middleware/gin"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 	"go.uber.org/zap"
 
 	"seculoc-back/internal/adapter/http/handler"
@@ -60,7 +65,11 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 
 	// Middleware
 	r.Use(middleware.RequestLogger())
+	r.Use(middleware.SecurityHeadersMiddleware())
 	r.Use(gin.Recovery())
+
+	configureCORS(r)
+	configureRateLimit(r)
 
 	// Public Routes
 	api := r.Group("/api/v1")
@@ -88,7 +97,9 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 
 			// Leases
 			protected.GET("/leases", leaseHandler.List)
+			protected.POST("/leases/draft", leaseHandler.CreateDraft)
 			protected.GET("/leases/:id/download", leaseHandler.Download)
+			protected.GET("/leases/:id/preview", leaseHandler.Preview)
 
 			// Subscriptions
 			protected.POST("/subscriptions", subHandler.Subscribe)
@@ -116,4 +127,40 @@ func NewServer(pool *pgxpool.Pool, log *zap.Logger) *gin.Engine {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return r
+}
+
+func configureCORS(r *gin.Engine) {
+	frontendURL := viper.GetString("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:5173"
+	}
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{frontendURL}
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
+	corsConfig.ExposeHeaders = []string{"Content-Length", "Content-Disposition"}
+	corsConfig.AllowCredentials = true
+	r.Use(cors.New(corsConfig))
+}
+
+func configureRateLimit(r *gin.Engine) {
+	// Skip in Test mode to avoid blocking E2E tests
+	if viper.GetString("GIN_MODE") == "test" {
+		return
+	}
+
+	// Define a rate: 20 reqs/second
+	rate := limiter.Rate{
+		Period: 1 * time.Second,
+		Limit:  20,
+	}
+
+	// Store
+	store := memory.NewStore()
+
+	// Instance
+	instance := limiter.New(store, rate)
+
+	// Middleware
+	r.Use(mgin.NewMiddleware(instance))
 }

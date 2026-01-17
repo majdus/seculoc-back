@@ -346,6 +346,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/leases/draft": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new lease in draft mode and invite the tenant",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "leases"
+                ],
+                "summary": "Create a draft lease",
+                "parameters": [
+                    {
+                        "description": "Draft Lease Details",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/seculoc-back_internal_core_service.DraftLeaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/leases/{id}/download": {
             "get": {
                 "security": [
@@ -353,14 +411,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Generate and download the lease contract (HTML/PDF)",
+                "description": "Generate and download the lease contract as PDF",
                 "produces": [
-                    "text/html"
+                    "application/pdf"
                 ],
                 "tags": [
                     "leases"
                 ],
-                "summary": "Download lease document",
+                "summary": "Download lease document (PDF)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -379,6 +437,76 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/leases/{id}/preview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get the lease contract as HTML for display",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "leases"
+                ],
+                "summary": "Preview lease document",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Lease ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "HTML Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1440,6 +1568,31 @@ const docTemplate = `{
                 }
             }
         },
+        "seculoc-back_internal_core_service.DraftLeaseRequest": {
+            "type": "object",
+            "required": [
+                "property_id",
+                "tenant_info",
+                "terms"
+            ],
+            "properties": {
+                "clauses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "property_id": {
+                    "type": "integer"
+                },
+                "tenant_info": {
+                    "$ref": "#/definitions/seculoc-back_internal_core_service.TenantDraft"
+                },
+                "terms": {
+                    "$ref": "#/definitions/seculoc-back_internal_core_service.LeaseTerms"
+                }
+            }
+        },
         "seculoc-back_internal_core_service.InvitationDetailsDTO": {
             "type": "object",
             "properties": {
@@ -1463,6 +1616,10 @@ const docTemplate = `{
         "seculoc-back_internal_core_service.LeaseDTO": {
             "type": "object",
             "properties": {
+                "charges_amount": {
+                    "description": "Added",
+                    "type": "number"
+                },
                 "contract_url": {
                     "type": "string"
                 },
@@ -1495,6 +1652,39 @@ const docTemplate = `{
                 }
             }
         },
+        "seculoc-back_internal_core_service.LeaseTerms": {
+            "type": "object",
+            "required": [
+                "deposit_amount",
+                "payment_day",
+                "rent_amount",
+                "start_date"
+            ],
+            "properties": {
+                "charges_amount": {
+                    "type": "number"
+                },
+                "deposit_amount": {
+                    "type": "number"
+                },
+                "end_date": {
+                    "description": "YYYY-MM-DD (Optional)",
+                    "type": "string"
+                },
+                "payment_day": {
+                    "type": "integer",
+                    "maximum": 31,
+                    "minimum": 1
+                },
+                "rent_amount": {
+                    "type": "number"
+                },
+                "start_date": {
+                    "description": "YYYY-MM-DD",
+                    "type": "string"
+                }
+            }
+        },
         "seculoc-back_internal_core_service.SubscriptionDTO": {
             "type": "object",
             "properties": {
@@ -1514,6 +1704,28 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "seculoc-back_internal_core_service.TenantDraft": {
+            "type": "object",
+            "required": [
+                "email",
+                "first_name",
+                "last_name"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "first_name": {
+                    "type": "string"
+                },
+                "last_name": {
+                    "type": "string"
+                },
+                "phone": {
                     "type": "string"
                 }
             }

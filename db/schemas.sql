@@ -111,12 +111,17 @@ CREATE TABLE solvency_checks (
 CREATE TABLE leases (
     id SERIAL PRIMARY KEY,
     property_id INT REFERENCES properties(id),
-    tenant_id INT REFERENCES users(id),
+    tenant_id INT REFERENCES users(id), -- Nullable for Drafts
     start_date DATE NOT NULL,
     end_date DATE,
     rent_amount DECIMAL(10, 2) NOT NULL,
+    charges_amount DECIMAL(10, 2) DEFAULT 0, -- Fix: Store charges specific to lease
     deposit_amount DECIMAL(10, 2) NOT NULL,
+    payment_day INT DEFAULT 5, -- Day of month (1-31)
+    special_clauses JSONB, -- Array of strings
     lease_status VARCHAR(50) DEFAULT 'draft', -- draft, signed_waiting_deposit, active, terminated
+    signature_status VARCHAR(50) DEFAULT 'draft', -- draft, pending, signed, rejected
+    signature_envelope_id TEXT, -- ID from external provider (Yousign/DocuSign)
     contract_url VARCHAR(255), -- Bail signé électroniquement [cite: 25]
     escrow_deposit_status escrow_status DEFAULT 'held', -- Séquestre de la caution [cite: 27]
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -177,6 +182,7 @@ CREATE TABLE transactions (
 CREATE TABLE lease_invitations (
     id SERIAL PRIMARY KEY,
     property_id INT NOT NULL REFERENCES properties(id),
+    lease_id INT REFERENCES leases(id), -- Linked Draft Lease
     owner_id INT NOT NULL REFERENCES users(id), -- L'expéditeur
     tenant_email VARCHAR(255) NOT NULL, -- Le destinataire
     token VARCHAR(255) UNIQUE NOT NULL, -- Token sécurisé envoyé par mail

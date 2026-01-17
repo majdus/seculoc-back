@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"seculoc-back/internal/adapter/storage/postgres"
+	"seculoc-back/internal/platform/auth"
 	"seculoc-back/internal/platform/email"
 )
 
@@ -109,7 +110,9 @@ func TestLogin_Success(t *testing.T) {
 	svc := NewUserService(mockTx, zap.NewNop(), emailSender, "http://test.com", new(MockLeaseService))
 
 	// Mock
-	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: pgtype.Text{String: "hashed_password123", Valid: true}}
+	// Mock
+	realHash, _ := auth.HashPassword("password123")
+	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: pgtype.Text{String: realHash, Valid: true}}
 	// Mocks for Login
 	mockQuerier.On("GetUserByEmail", mock.Anything, "test@example.com").Return(existingUser, nil)
 	mockQuerier.On("CountPropertiesByOwner", mock.Anything, mock.AnythingOfType("pgtype.Int4")).Return(int64(1), nil)
@@ -160,7 +163,8 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 		_ = fn(mockQuerier3)
 	})
 
-	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: pgtype.Text{String: "hashed_password123", Valid: true}}
+	realHash2, _ := auth.HashPassword("password123")
+	existingUser := postgres.User{ID: 1, Email: "test@example.com", PasswordHash: pgtype.Text{String: realHash2, Valid: true}}
 	mockQuerier3.On("GetUserByEmail", mock.Anything, "test@example.com").Return(existingUser, nil)
 
 	// Mock capability checks (Login proceeds to check these even if password will fail later, as they are in the same Tx block)

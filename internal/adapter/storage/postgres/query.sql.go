@@ -121,10 +121,63 @@ func (q *Queries) CreateCreditTransaction(ctx context.Context, arg CreateCreditT
 	return i, err
 }
 
+const createDraftLease = `-- name: CreateDraftLease :one
+INSERT INTO leases (
+    property_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, 'draft'
+)
+RETURNING id, property_id, tenant_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status, signature_status, signature_envelope_id, contract_url, escrow_deposit_status, created_at
+`
+
+type CreateDraftLeaseParams struct {
+	PropertyID     pgtype.Int4    `json:"property_id"`
+	StartDate      pgtype.Date    `json:"start_date"`
+	EndDate        pgtype.Date    `json:"end_date"`
+	RentAmount     pgtype.Numeric `json:"rent_amount"`
+	ChargesAmount  pgtype.Numeric `json:"charges_amount"`
+	DepositAmount  pgtype.Numeric `json:"deposit_amount"`
+	PaymentDay     pgtype.Int4    `json:"payment_day"`
+	SpecialClauses []byte         `json:"special_clauses"`
+}
+
+func (q *Queries) CreateDraftLease(ctx context.Context, arg CreateDraftLeaseParams) (Lease, error) {
+	row := q.db.QueryRow(ctx, createDraftLease,
+		arg.PropertyID,
+		arg.StartDate,
+		arg.EndDate,
+		arg.RentAmount,
+		arg.ChargesAmount,
+		arg.DepositAmount,
+		arg.PaymentDay,
+		arg.SpecialClauses,
+	)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.TenantID,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmount,
+		&i.ChargesAmount,
+		&i.DepositAmount,
+		&i.PaymentDay,
+		&i.SpecialClauses,
+		&i.LeaseStatus,
+		&i.SignatureStatus,
+		&i.SignatureEnvelopeID,
+		&i.ContractUrl,
+		&i.EscrowDepositStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO lease_invitations (property_id, owner_id, tenant_email, token, expires_at)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, property_id, owner_id, tenant_email, token, status, expires_at, created_at
+RETURNING id, property_id, lease_id, owner_id, tenant_email, token, status, expires_at, created_at
 `
 
 type CreateInvitationParams struct {
@@ -147,6 +200,46 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 	err := row.Scan(
 		&i.ID,
 		&i.PropertyID,
+		&i.LeaseID,
+		&i.OwnerID,
+		&i.TenantEmail,
+		&i.Token,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createInvitationWithLease = `-- name: CreateInvitationWithLease :one
+INSERT INTO lease_invitations (property_id, lease_id, owner_id, tenant_email, token, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, property_id, lease_id, owner_id, tenant_email, token, status, expires_at, created_at
+`
+
+type CreateInvitationWithLeaseParams struct {
+	PropertyID  int32            `json:"property_id"`
+	LeaseID     pgtype.Int4      `json:"lease_id"`
+	OwnerID     int32            `json:"owner_id"`
+	TenantEmail string           `json:"tenant_email"`
+	Token       string           `json:"token"`
+	ExpiresAt   pgtype.Timestamp `json:"expires_at"`
+}
+
+func (q *Queries) CreateInvitationWithLease(ctx context.Context, arg CreateInvitationWithLeaseParams) (LeaseInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitationWithLease,
+		arg.PropertyID,
+		arg.LeaseID,
+		arg.OwnerID,
+		arg.TenantEmail,
+		arg.Token,
+		arg.ExpiresAt,
+	)
+	var i LeaseInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.LeaseID,
 		&i.OwnerID,
 		&i.TenantEmail,
 		&i.Token,
@@ -159,11 +252,11 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 
 const createLease = `-- name: CreateLease :one
 INSERT INTO leases (
-    property_id, tenant_id, start_date, rent_amount, deposit_amount, lease_status
+    property_id, tenant_id, start_date, rent_amount, charges_amount, deposit_amount, lease_status
 ) VALUES (
-    $1, $2, $3, $4, $5, 'draft'
+    $1, $2, $3, $4, $5, $6, 'draft'
 )
-RETURNING id, property_id, tenant_id, start_date, end_date, rent_amount, deposit_amount, lease_status, contract_url, escrow_deposit_status, created_at
+RETURNING id, property_id, tenant_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status, signature_status, signature_envelope_id, contract_url, escrow_deposit_status, created_at
 `
 
 type CreateLeaseParams struct {
@@ -171,6 +264,7 @@ type CreateLeaseParams struct {
 	TenantID      pgtype.Int4    `json:"tenant_id"`
 	StartDate     pgtype.Date    `json:"start_date"`
 	RentAmount    pgtype.Numeric `json:"rent_amount"`
+	ChargesAmount pgtype.Numeric `json:"charges_amount"`
 	DepositAmount pgtype.Numeric `json:"deposit_amount"`
 }
 
@@ -180,6 +274,7 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 		arg.TenantID,
 		arg.StartDate,
 		arg.RentAmount,
+		arg.ChargesAmount,
 		arg.DepositAmount,
 	)
 	var i Lease
@@ -190,8 +285,13 @@ func (q *Queries) CreateLease(ctx context.Context, arg CreateLeaseParams) (Lease
 		&i.StartDate,
 		&i.EndDate,
 		&i.RentAmount,
+		&i.ChargesAmount,
 		&i.DepositAmount,
+		&i.PaymentDay,
+		&i.SpecialClauses,
 		&i.LeaseStatus,
+		&i.SignatureStatus,
+		&i.SignatureEnvelopeID,
 		&i.ContractUrl,
 		&i.EscrowDepositStatus,
 		&i.CreatedAt,
@@ -398,8 +498,57 @@ func (q *Queries) DecreasePropertyCredits(ctx context.Context, id int32) error {
 	return err
 }
 
+const getInvitationByEmailAndProperty = `-- name: GetInvitationByEmailAndProperty :one
+SELECT id, property_id, lease_id, owner_id, tenant_email, token, status, expires_at, created_at FROM lease_invitations
+WHERE tenant_email = $1 AND property_id = $2 AND status = 'pending' LIMIT 1
+`
+
+type GetInvitationByEmailAndPropertyParams struct {
+	TenantEmail string `json:"tenant_email"`
+	PropertyID  int32  `json:"property_id"`
+}
+
+func (q *Queries) GetInvitationByEmailAndProperty(ctx context.Context, arg GetInvitationByEmailAndPropertyParams) (LeaseInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByEmailAndProperty, arg.TenantEmail, arg.PropertyID)
+	var i LeaseInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.OwnerID,
+		&i.TenantEmail,
+		&i.Token,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getInvitationByLeaseID = `-- name: GetInvitationByLeaseID :one
+SELECT id, property_id, lease_id, owner_id, tenant_email, token, status, expires_at, created_at FROM lease_invitations
+WHERE lease_id = $1 LIMIT 1
+`
+
+func (q *Queries) GetInvitationByLeaseID(ctx context.Context, leaseID pgtype.Int4) (LeaseInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationByLeaseID, leaseID)
+	var i LeaseInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.LeaseID,
+		&i.OwnerID,
+		&i.TenantEmail,
+		&i.Token,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getInvitationByToken = `-- name: GetInvitationByToken :one
-SELECT id, property_id, owner_id, tenant_email, token, status, expires_at, created_at FROM lease_invitations
+SELECT id, property_id, lease_id, owner_id, tenant_email, token, status, expires_at, created_at FROM lease_invitations
 WHERE token = $1 LIMIT 1
 `
 
@@ -409,6 +558,7 @@ func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Lease
 	err := row.Scan(
 		&i.ID,
 		&i.PropertyID,
+		&i.LeaseID,
 		&i.OwnerID,
 		&i.TenantEmail,
 		&i.Token,
@@ -420,7 +570,7 @@ func (q *Queries) GetInvitationByToken(ctx context.Context, token string) (Lease
 }
 
 const getLease = `-- name: GetLease :one
-SELECT id, property_id, tenant_id, start_date, end_date, rent_amount, deposit_amount, lease_status, contract_url, escrow_deposit_status, created_at FROM leases
+SELECT id, property_id, tenant_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status, signature_status, signature_envelope_id, contract_url, escrow_deposit_status, created_at FROM leases
 WHERE id = $1 LIMIT 1
 `
 
@@ -434,8 +584,47 @@ func (q *Queries) GetLease(ctx context.Context, id int32) (Lease, error) {
 		&i.StartDate,
 		&i.EndDate,
 		&i.RentAmount,
+		&i.ChargesAmount,
 		&i.DepositAmount,
+		&i.PaymentDay,
+		&i.SpecialClauses,
 		&i.LeaseStatus,
+		&i.SignatureStatus,
+		&i.SignatureEnvelopeID,
+		&i.ContractUrl,
+		&i.EscrowDepositStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLeaseByPropertyAndStatus = `-- name: GetLeaseByPropertyAndStatus :one
+SELECT id, property_id, tenant_id, start_date, end_date, rent_amount, charges_amount, deposit_amount, payment_day, special_clauses, lease_status, signature_status, signature_envelope_id, contract_url, escrow_deposit_status, created_at FROM leases
+WHERE property_id = $1 AND lease_status = $2 LIMIT 1
+`
+
+type GetLeaseByPropertyAndStatusParams struct {
+	PropertyID  pgtype.Int4 `json:"property_id"`
+	LeaseStatus pgtype.Text `json:"lease_status"`
+}
+
+func (q *Queries) GetLeaseByPropertyAndStatus(ctx context.Context, arg GetLeaseByPropertyAndStatusParams) (Lease, error) {
+	row := q.db.QueryRow(ctx, getLeaseByPropertyAndStatus, arg.PropertyID, arg.LeaseStatus)
+	var i Lease
+	err := row.Scan(
+		&i.ID,
+		&i.PropertyID,
+		&i.TenantID,
+		&i.StartDate,
+		&i.EndDate,
+		&i.RentAmount,
+		&i.ChargesAmount,
+		&i.DepositAmount,
+		&i.PaymentDay,
+		&i.SpecialClauses,
+		&i.LeaseStatus,
+		&i.SignatureStatus,
+		&i.SignatureEnvelopeID,
 		&i.ContractUrl,
 		&i.EscrowDepositStatus,
 		&i.CreatedAt,
@@ -717,7 +906,7 @@ func (q *Queries) IncreasePropertyCredits(ctx context.Context, id int32) error {
 
 const listLeasesByTenant = `-- name: ListLeasesByTenant :many
 SELECT 
-    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.deposit_amount, l.lease_status, l.contract_url, l.created_at,
+    l.id, l.property_id, l.tenant_id, l.start_date, l.end_date, l.rent_amount, l.charges_amount, l.deposit_amount, l.lease_status, l.signature_status, l.contract_url, l.created_at,
     p.address as property_address, p.rental_type
 FROM leases l
 JOIN properties p ON l.property_id = p.id
@@ -732,8 +921,10 @@ type ListLeasesByTenantRow struct {
 	StartDate       pgtype.Date      `json:"start_date"`
 	EndDate         pgtype.Date      `json:"end_date"`
 	RentAmount      pgtype.Numeric   `json:"rent_amount"`
+	ChargesAmount   pgtype.Numeric   `json:"charges_amount"`
 	DepositAmount   pgtype.Numeric   `json:"deposit_amount"`
 	LeaseStatus     pgtype.Text      `json:"lease_status"`
+	SignatureStatus pgtype.Text      `json:"signature_status"`
 	ContractUrl     pgtype.Text      `json:"contract_url"`
 	CreatedAt       pgtype.Timestamp `json:"created_at"`
 	PropertyAddress string           `json:"property_address"`
@@ -756,8 +947,10 @@ func (q *Queries) ListLeasesByTenant(ctx context.Context, tenantID pgtype.Int4) 
 			&i.StartDate,
 			&i.EndDate,
 			&i.RentAmount,
+			&i.ChargesAmount,
 			&i.DepositAmount,
 			&i.LeaseStatus,
+			&i.SignatureStatus,
 			&i.ContractUrl,
 			&i.CreatedAt,
 			&i.PropertyAddress,
@@ -1001,6 +1194,22 @@ type UpdateLeaseContractURLParams struct {
 
 func (q *Queries) UpdateLeaseContractURL(ctx context.Context, arg UpdateLeaseContractURLParams) error {
 	_, err := q.db.Exec(ctx, updateLeaseContractURL, arg.ID, arg.ContractUrl)
+	return err
+}
+
+const updateLeaseTenant = `-- name: UpdateLeaseTenant :exec
+UPDATE leases
+SET tenant_id = $2, lease_status = 'active' -- Or 'pending_signature'
+WHERE id = $1
+`
+
+type UpdateLeaseTenantParams struct {
+	ID       int32       `json:"id"`
+	TenantID pgtype.Int4 `json:"tenant_id"`
+}
+
+func (q *Queries) UpdateLeaseTenant(ctx context.Context, arg UpdateLeaseTenantParams) error {
+	_, err := q.db.Exec(ctx, updateLeaseTenant, arg.ID, arg.TenantID)
 	return err
 }
 
